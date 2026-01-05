@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# MCP runtime artifacts
+mcp_server/history.json
+mcp_server/history_archive.json
+mcp_server/url_cache.json
+mcp_server/url_cache/
