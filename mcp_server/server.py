@@ -1483,6 +1483,13 @@ DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX = (
 def _generate_desc() -> str:
     base = """生成图片或视频。
 
+参考图选择（内置SOP，按此执行）：
+- “继续/再改/迭代/变视频/把它加到上一张里” → 使用历史底图：传 history_id（必要时先调用 history 搜索/定位）。
+- “参考这张图生成/把这图变成…” → 使用用户新图：传 use_latest_user_image=true。
+- 文本里出现的图片链接/文件名/哈希 → 只当作 history(query=...) 的检索线索，不当作参考图传。
+
+（当用户新上传图但意图是改历史图：底图用 history_id；新图内容由你看图提取后写进 prompt。）
+
 输出要求：
 - 调用后：把工具返回的图片/视频链接使用MD链接格式粘贴到最终回复正文里。
 
@@ -1530,6 +1537,9 @@ def _generate_latest_upload_desc() -> str:
 HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
 用途：搜索/定位 history_id（供 generate.history_id 使用）。
+
+用法（内置SOP）：
+- 当用户说“继续/上一张/再改改/把它加进去/变视频”等相对指代时：先用 query/keyword 在 recent 里搜，拿到 history_id 再 generate。
 
 参数：
 - history_id: 指定则只返回该条
