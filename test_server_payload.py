@@ -615,6 +615,8 @@ class TestGeneratePayload(unittest.TestCase):
             patch.object(server, "download_url_as_base64", new=AsyncMock(return_value="data:image/jpeg;base64,Zm9v")),
             patch.object(server.http_client, "get_client", new=AsyncMock(return_value=None)),
             patch.object(server, "_flow2api_stream_chat_completions", new=AsyncMock(return_value=(200, "", "ok", ""))),
+            patch.object(server, "_pick_latest_user_image_path", return_value=server.Path("C:/allowed/x.png")),
+            patch.object(server, "_import_local_file", new=AsyncMock(return_value=("data:image/png;base64,Zm9v", "http://127.0.0.1:46262/mcp-cache/x.png"))),
         ):
             result = asyncio.run(
                 server.handle_generate(
@@ -622,12 +624,12 @@ class TestGeneratePayload(unittest.TestCase):
                         "model": image_model,
                         "prompt": "x",
                         "history_id": 1,
-                        "local_file": "file:///C:/allowed/a.png",
+                        "use_latest_user_image": True,
                     }
                 )
             )
             self.assertTrue(result)
-            self.assertIn("三选一", result[0].text)
+            self.assertIn("二选一", result[0].text)
 
     def test_generate_wraps_video_url_as_markdown_link(self) -> None:
         video_url = "http://example.com/a.mp4"

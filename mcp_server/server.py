@@ -783,9 +783,7 @@ async def _import_local_file(value: str) -> tuple[Optional[str], Optional[str]]:
     s = str(value or "").strip()
     if s.lower().startswith(("http://", "https://")):
         raise ValueError(
-            "local_file 仅支持本地文件路径或 file:/// URI；不要传 http(s) 链接。"
-            "如需使用 Cherry Studio 上传的图片，请改用 use_latest_user_image=true，"
-            "或提供 file:///C:/... 的本地路径。"
+            "仅支持本地文件路径或 file:/// URI；不要传 http(s) 链接。"
         )
 
     p = _local_file_uri_to_path(value)
@@ -970,7 +968,7 @@ Reference image selection policy is intentionally *not* implemented via keyword 
 
 This MCP server only uses explicit tool parameters:
 - history_id: reference from history
-- use_latest_user_image/local_file: reference from Cherry Studio upload directory (when enabled)
+- use_latest_user_image: reference from latest user upload (when enabled)
 
 All "what does the user mean by this image?" decisions should be made by the model
 according to the tool descriptions.
@@ -1488,7 +1486,7 @@ def _generate_desc() -> str:
 输出要求：
 - 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里。
 
-参考图参数（三选一）：
+参考图参数（二选一）：
 - history_id：使用历史记录中的图片作为参考图（配合 history 工具获取/搜索）
 """
 
@@ -1503,13 +1501,13 @@ def _generate_desc() -> str:
         return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
 
     reference_policy = """- use_latest_user_image=true：使用“用户最新上传图”作为参考图
-- local_file=...：使用本地图片路径或 file:/// 作为参考图"""
+"""
 
     tail = """
 参数：
 - model（必填）
 - prompt（必填）
-- history_id / use_latest_user_image / local_file（可选；不填表示纯文本生成）
+- history_id / use_latest_user_image（可选；不填表示纯文本生成）
 """
 
     return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
@@ -1578,11 +1576,6 @@ def get_tools() -> list[Tool]:
                     "type": "boolean",
                     "default": False,
                     "description": "可选：使用“用户最新上传图”作为参考图",
-                },
-                "local_file": {
-                    "type": "string",
-                    "pattern": "^(file://|[A-Za-z]:\\\\\\\\|/).+",
-                    "description": "可选：本地图片路径或 file:/// URI（禁止 http(s) URL）",
                 },
             }
         )
@@ -1704,14 +1697,12 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         ref_sources += 1
     if args.get("use_latest_user_image"):
         ref_sources += 1
-    if args.get("local_file"):
-        ref_sources += 1
 
     if ref_sources > 1:
         return [
             TextContent(
                 type="text",
-                text="错误: 参考图来源只能三选一（history_id / use_latest_user_image / local_file），不允许同时提供多个。",
+                text="错误: 参考图来源只能二选一（history_id / use_latest_user_image），不允许同时提供多个。",
             )
         ]
 
@@ -1729,20 +1720,12 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
             return [TextContent(type="text", text=f"❌ 用户图片导入失败: {exc}")]
 
     if args.get("local_file"):
-        try:
-            data_uri, local_url = await _import_local_file(str(args.get("local_file")))
-            if data_uri:
-                images.append(data_uri)
-                mcp_logs.append("local_file: imported 1 image")
-            if local_url:
-                history_manager.add_success(
-                    "local_file",
-                    f"local_file: {os.path.basename(str(args.get('local_file')))}",
-                    [local_url],
-                )
-                mcp_logs.append("local_file: recorded to history")
-        except Exception as exc:
-            return [TextContent(type="text", text=f"❌ 本地文件导入失败: {exc}")]
+        return [
+            TextContent(
+                type="text",
+                text="错误: 当前版本不支持 local_file；参考图请使用 history_id 或 use_latest_user_image。",
+            )
+        ]
 
     if args.get("images"):
         return [
@@ -1793,13 +1776,13 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
                 text=(
                     "❌ 未能从该 history_id 获取到可用参考图。\n\n"
                     "请先调用 `history`，确认该条记录里确实有图片结果（并复制正确的 history_id），"
-                    "或改用 `use_latest_user_image=true` / `local_file=file:///...` 提供参考图。"
+                    "或改用 `use_latest_user_image=true` 提供参考图。"
                 ),
             )
         ]
 
     # Note: This server does not infer reference intent from prompt text.
-    # If the user wants image-to-image, the model must pass history_id / use_latest_user_image / local_file explicitly.
+    # If the user wants image-to-image, the model must pass history_id / use_latest_user_image explicitly.
 
     prompt_to_send = f"{prompt}{DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX}"
 
