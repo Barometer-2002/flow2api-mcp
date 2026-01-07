@@ -743,5 +743,23 @@ class TestGeneratePayload(unittest.TestCase):
                 self.assertNotIn("missing", uc._index)
 
 
+class TestPrompts(unittest.TestCase):
+    def test_list_prompts_contains_expected_names(self) -> None:
+        prompts = asyncio.run(server.list_prompts())
+        names = {p.name for p in prompts}
+        self.assertIn("flow2api_reference_sop", names)
+        self.assertIn("flow2api_prompt_builder", names)
+        self.assertIn("flow2api_troubleshoot_generate", names)
+
+    def test_get_prompt_renders_template(self) -> None:
+        result = asyncio.run(
+            server.get_prompt("flow2api_prompt_builder", {"user_request": "把这张图改成水墨画"})
+        )
+        self.assertTrue(result.messages)
+        content = result.messages[0].content
+        self.assertEqual(content.type, "text")
+        self.assertIn("把这张图改成水墨画", content.text)
+
+
 if __name__ == "__main__":
     unittest.main()

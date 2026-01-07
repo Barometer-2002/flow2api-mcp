@@ -26,10 +26,19 @@ from typing import Any, Optional
 import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import GetPromptResult, Prompt, PromptArgument, PromptMessage, TextContent, Tool
 
 # 创建MCP服务器实例
 server = Server("flow2api-mcp")
+
+
+def _apply_prompt_template(template: str, arguments: dict[str, str] | None) -> str:
+    if not arguments:
+        return template
+    out = template
+    for k, v in arguments.items():
+        out = out.replace("{{" + str(k) + "}}", str(v))
+    return out
 
 
 # -----------------------------
@@ -2226,6 +2235,103 @@ async def handle_cache(args: dict[str, Any]) -> list[TextContent]:
 async def list_tools():
     """列出可用的工具"""
     return get_tools()
+
+
+PROMPTS: dict[str, dict[str, Any]] = {
+    "flow2api_reference_sop": {
+        "title": "Reference SOP (Base vs Element)",
+        "description": "参考图选择与冲突处理（Base vs Element），用于稳定连续改图/变视频流程。",
+        "arguments": [],
+        "template": (
+            "你已接入 MCP：flow2api（generate/history/cache）。\n\n"
+            "参考图选择（Base vs Element）：\n"
+            "- 工具只接收 1 张参考图（Base）。\n"
+            "- 额外的新上传图/外链图视为素材（Element）：由你看图提取关键元素，用文字写进 prompt。\n\n"
+            "调用规则：\n"
+            "1) 新建/重绘：用户说“参考这张图生成/把这图变成…” → generate(use_latest_user_image=true)。\n"
+            "2) 迭代修改：用户说“继续/再改改/加上/变成视频/上一张…” → generate(history_id=...)；不知道 ID 先 history(scope=recent, query=...) 搜索定位。\n"
+            "3) 冲突场景：用户新上传图 + “把它加到上一张/历史图里” → Base=history_id；把新图的关键元素写入 prompt（不要切换到 use_latest_user_image）。\n"
+            "4) 文本里出现图片链接/文件名/哈希：只当作 history(query=...) 的检索线索，不当作参考图传给上游。\n\n"
+            "输出要求：\n"
+            "- generate 返回后，把图片/视频链接以 Markdown 形式粘贴到最终正文。\n"
+            "- cache 清理历史需要 include_history=true 且 confirm=true。\n"
+        ),
+    },
+    "flow2api_prompt_builder": {
+        "title": "Prompt Builder",
+        "description": "把用户意图改写为单段落生成提示词（主体/场景/构图/光线/风格/细节）。",
+        "arguments": [
+            PromptArgument(
+                name="user_request",
+                description="用户原始需求（会被你改写成生成 prompt）",
+                required=True,
+            )
+        ],
+        "template": (
+            "将下列用户需求改写为适合生成模型的“单段落提示词”。\n"
+            "要求：主体、场景、构图/镜头、光线、风格、细节；画面内可见文字默认简体中文（除非用户指定）。\n\n"
+            "用户需求：\n{{user_request}}\n"
+        ),
+    },
+    "flow2api_troubleshoot_generate": {
+        "title": "Troubleshoot Generate Failures",
+        "description": "生成失败时的最小排查清单与下一步动作建议。",
+        "arguments": [
+            PromptArgument(
+                name="error",
+                description="工具/上游返回的错误信息（可直接粘贴）",
+                required=True,
+            )
+        ],
+        "template": (
+            "你正在排查一次 generate 失败。\n\n"
+            "先输出 4 行信息（便于定位）：\n"
+            "1) model=...\n"
+            "2) reference=history_id/use_latest_user_image/none\n"
+            "3) prompt_summary=...\n"
+            "4) error={{error}}\n\n"
+            "然后给出下一步建议（按优先级）：\n"
+            "- 若是 401/403：检查 API Key/权限/配额。\n"
+            "- 若是 400：缩短 prompt、检查模型名、检查参考图是否存在。\n"
+            "- 若无结果：提示用户开启/检查本机缓存（如需要展示本地链接），并建议换模型重试。\n"
+        ),
+    },
+}
+
+
+@server.list_prompts()
+async def list_prompts():
+    return [
+        Prompt(
+            name=name,
+            title=data.get("title"),
+            description=data.get("description"),
+            arguments=data.get("arguments") or [],
+        )
+        for name, data in PROMPTS.items()
+    ]
+
+
+@server.get_prompt()
+async def get_prompt(name: str, arguments: dict[str, str] | None):
+    data = PROMPTS.get(name)
+    if not data:
+        return GetPromptResult(
+            description=f"Unknown prompt: {name}",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=f"Unknown prompt: {name}"),
+                )
+            ],
+        )
+
+    template = str(data.get("template") or "")
+    text = _apply_prompt_template(template, arguments)
+    return GetPromptResult(
+        description=str(data.get("description") or ""),
+        messages=[PromptMessage(role="user", content=TextContent(type="text", text=text))],
+    )
 
 
 @server.call_tool()
