@@ -24,8 +24,9 @@ pip install -r requirements.txt
 
 ## 设计速览（缓存 / 本地上传）
 
-- 本机媒体缓存（可选）：开启 `FLOW2API_MCP_URL_CACHE=1` 后，MCP 会把上游返回的图片/视频链接下载到本地 `mcp_server/url_cache/`，并通过内置 HTTP（默认 `http://127.0.0.1:46262/mcp-cache/...`）提供稳定访问，避免上游临时链接失效。
-- Cherry Studio 本地上传图（可选）：由于 MCP 无法直接读取对话附件，本项目通过读取 Cherry Studio 上传目录（`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）来“导入用户最新上传图”，用于图生图参考（`use_latest_user_image=true` 或 `local_file=file:///...`）。
+- 本机媒体缓存（推荐）：开启 `FLOW2API_MCP_URL_CACHE=1` 后，MCP 会把上游返回的图片/视频链接下载到本地 `mcp_server/url_cache/`，并通过内置 HTTP（默认 `http://127.0.0.1:46262/mcp-cache/...`）提供稳定访问，避免上游临时链接失效。
+- Cherry Studio 本地上传图（推荐）：由于 MCP 无法直接读取对话附件，本项目通过读取 Cherry Studio 上传目录（`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）来“导入用户最新上传图”，用于图生图参考，未配置则只能通过历史生图指定参考图。
+- 全部环境变量与配置选项见 `docs/CONFIG.md`。
 
 ## MCP 客户端配置（通用 JSON）
 
@@ -55,8 +56,11 @@ pip install -r requirements.txt
 - 类型：`标准输入/输出 (stdio)`
 - 命令：你的 Python 解释器路径
 - 参数（推荐）：`-m mcp_server`
-  - 如果客户端不支持多参数输入，也可使用脚本路径：`D:\\github\\flow2api-mcp\\mcp_server\\server.py`
+  - 如果客户端不支持多参数输入，使用脚本路径：`D:\\github\\flow2api-mcp\\mcp_server\\server.py`
 - 环境变量：至少填 `FLOW2API_BASE_URL`、`FLOW2API_API_KEY`
+- 推荐补充以下环境变量：
+  - 本机缓存：`FLOW2API_MCP_URL_CACHE=1`
+  - Cherry Studio 上传图目录：`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR=C://Users//<YOUR_USERNAME>//AppData//Roaming//CherryStudio//Data//Files`
 - 超时：建议设置为 `120` 秒或更高
 
 ## 工具速览
