@@ -54,24 +54,9 @@ pip install -r requirements.txt
 - 查最近历史：`history { "scope": "recent", "limit": 5 }`
 - 清理本机缓存：`cache { "action": "clear", "include_history": false }`
 
-## 系统提示词（可选）
+## MCP Prompts（可选）
 
-通常不需要额外系统提示词；如你希望模型更稳定地调用 MCP，可使用以下简版补强：
-
-```
-你已接入 MCP：flow2api（generate/history/cache）。
-
-参考图（避免丢失历史上下文）：
-1) 先区分“底图（Base）”与“素材（Element）”：工具只接收 1 张参考图（Base），Element 需要你转译成文字写进 prompt。
-2) 新建/重绘：用户说“参考这张图生成/把这图变成…” → generate(use_latest_user_image=true)。
-3) 迭代修改：用户说“继续/再改改/加上/变成视频…” → 必须使用历史底图：generate(history_id=...)；不知道 history_id 先 history(recent) 查。
-4) 冲突场景：用户新上传图 + “把它加到上一张/历史图里” → Base=history_id；把新图里关键元素用文字写入 prompt。
-5) 文本里出现的图片链接/文件名/哈希：只当作 history(query=...) 的检索线索，不要当参考图直接传。
-
-输出要求：
-- 调用 generate 后，把图片/视频链接使用 MD 形式粘贴到最终正文（不要只留在工具返回区）。
-- cache 清理历史需要 confirm=true（include_history=true 且 clear/prune）。
-```
+本 MCP 提供可复用的 Prompts（模板提示），用于让客户端/模型更稳定地理解“参考图选择/失败排查/提示词改写”等流程；是否可用取决于你的 MCP 客户端是否支持 Prompts。
 
 ## 自定义模型配置（`mcp_server/models.json`）
 
