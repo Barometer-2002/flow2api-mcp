@@ -61,14 +61,11 @@ flowchart TD
 
 参数：
 - `history_id`：可选；指定则只返回该条记录（用于“查询某一条历史信息”，避免输出全列表）
-- `query`：可选；关键词搜索（匹配不唯一则返回候选摘要；唯一则直接返回单条）
-- `keyword`：可选；同 `query`（兼容别名）
 - `limit`：返回条数（默认 5）
 - `scope`：`recent` / `archive`（默认 `recent`；跨会话更推荐用 `archive`）
 
 示例：
 - `history { "history_id": 123 }`
-- `history { "query": "水墨" }`
 - `history { "scope": "recent", "limit": 5 }`
 - `history { "scope": "archive", "limit": 20 }`
 

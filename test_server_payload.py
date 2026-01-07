@@ -384,40 +384,10 @@ class TestGeneratePayload(unittest.TestCase):
             self.assertIn("## 123.", result[0].text)
             self.assertIn("![history-123-1]", result[0].text)
 
-    def test_history_query_unique_returns_single_item(self) -> None:
-        item = {
-            "id": 11,
-            "time": "t",
-            "model": "m",
-            "prompt": "this is watercolor",
-            "urls": ["http://127.0.0.1:46262/mcp-cache/x.jpg"],
-            "error": None,
-        }
-        with (
-            patch.object(server, "URL_CACHE_ENABLED", False),
-            patch.object(server.history_manager, "sizes", return_value={"recent": 1, "archive": 1}),
-            patch.object(server.history_manager, "get_recent", return_value=[item]),
-        ):
-            result = asyncio.run(server.handle_history({"query": "watercolor", "scope": "recent"}))
-            self.assertTrue(result)
-            self.assertIn("# 生成历史（搜索结果-单条）", result[0].text)
-            self.assertIn("## 11.", result[0].text)
-
-    def test_history_query_multiple_returns_candidates(self) -> None:
-        items = [
-            {"id": 1, "time": "t1", "model": "m", "prompt": "foo a", "urls": [], "error": None},
-            {"id": 2, "time": "t2", "model": "m", "prompt": "foo b", "urls": [], "error": None},
-        ]
-        with (
-            patch.object(server, "URL_CACHE_ENABLED", False),
-            patch.object(server.history_manager, "sizes", return_value={"recent": 2, "archive": 2}),
-            patch.object(server.history_manager, "get_recent", return_value=items),
-        ):
-            result = asyncio.run(server.handle_history({"query": "foo", "scope": "recent"}))
-            self.assertTrue(result)
-            self.assertIn("# 生成历史（搜索候选）", result[0].text)
-            self.assertIn("`1`", result[0].text)
-            self.assertIn("`2`", result[0].text)
+    def test_history_query_not_supported(self) -> None:
+        result = asyncio.run(server.handle_history({"query": "x", "scope": "recent"}))
+        self.assertTrue(result)
+        self.assertIn("不支持关键词搜索", result[0].text)
 
     def test_import_local_file_uri_copies_to_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

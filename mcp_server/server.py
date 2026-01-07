@@ -1495,7 +1495,7 @@ def _generate_desc() -> str:
 参考图选择（内置SOP，按此执行）：
 - “继续/再改/迭代/变视频/把它加到上一张里” → 使用历史底图：传 history_id（必要时先调用 history 搜索/定位）。
 - “参考这张图生成/把这图变成…” → 使用用户新图：传 use_latest_user_image=true。
-- 文本里出现的图片链接/文件名/哈希 → 只当作 history(query=...) 的检索线索，不当作参考图传。
+- 文本里出现的图片链接/文件名/哈希 → 只当作历史线索；先 history(scope=recent, limit=10) 列出候选让用户选 history_id。
 
 （当用户新上传图但意图是改历史图：底图用 history_id；新图内容由你看图提取后写进 prompt。）
 
@@ -1534,11 +1534,10 @@ HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 用途：搜索/定位 history_id（供 generate.history_id 使用）。
 
 用法（内置SOP）：
-- 当用户说“继续/上一张/再改改/把它加进去/变视频”等相对指代时：先用 query/keyword 在 recent 里搜，拿到 history_id 再 generate。
+- 当用户说“继续/上一张/再改改/把它加进去/变视频”等相对指代时：先列出 recent 候选让用户选 history_id，再 generate。
 
 参数：
 - history_id: 指定则只返回该条
-- query / keyword: 关键词搜索（不唯一返回候选摘要；唯一返回单条）
 - limit: 返回条数（默认 5）
 - scope: recent / archive（默认 recent）"""
 
@@ -1608,14 +1607,6 @@ def get_tools() -> list[Tool]:
                     "history_id": {
                         "type": "integer",
                         "description": "可选：指定则只返回该条记录（稳定 history_id）",
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "可选：关键词搜索（匹配不唯一返回候选摘要；唯一返回单条）",
-                    },
-                    "keyword": {
-                        "type": "string",
-                        "description": "可选：同 query（兼容别名）",
                     },
                     "limit": {
                         "type": "integer",
@@ -2011,60 +2002,19 @@ async def handle_history(args: dict[str, Any]) -> list[TextContent]:
 
         return [TextContent(type="text", text=_render_one(item, title="# 生成历史（单条）"))]
 
-    query = str(args.get("query") or args.get("keyword") or "").strip()
-    if query:
-        items = history_manager.get_archive(MAX_HISTORY_ARCHIVE_SIZE) if scope == "archive" else history_manager.get_recent(MAX_HISTORY_RECENT_SIZE)
-        q = query.lower()
-
-        def _match(it: dict[str, Any]) -> bool:
-            haystacks = [
-                str(it.get("prompt", "")),
-                str(it.get("model", "")),
-                str(it.get("time", "")),
-                " ".join([str(u) for u in (it.get("urls", []) or [])]),
-            ]
-            return any(q in h.lower() for h in haystacks if h)
-
-        matches = [it for it in items if _match(it)]
-        if not matches:
-            return [
-                TextContent(
-                    type="text",
-                    text=(
-                        f"未找到匹配记录：`{query}`\n\n"
-                        "建议：\n"
-                        "- 调大 limit 或改用 scope=archive\n"
-                        "- 或直接用 history_id 精准查询：`history { \"history_id\": 123 }`"
-                    ),
-                )
-            ]
-
-        if len(matches) == 1:
-            return [TextContent(type="text", text=_render_one(matches[0], title="# 生成历史（搜索结果-单条）"))]
-
-        sizes = history_manager.sizes()
-        lines: list[str] = [
-            "# 生成历史（搜索候选）",
-            f"- query: `{query}`",
-            f"- 命中: {len(matches)}",
-            f"- 统计: recent={sizes['recent']}, archive={sizes['archive']}",
-            "",
-            "请从下列候选中选择一个 `history_id`：",
+    if args.get("query") is not None or args.get("keyword") is not None:
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    "当前版本不支持关键词搜索（query/keyword）。\n\n"
+                    "请改用：\n"
+                    "- `history { \"scope\": \"recent\", \"limit\": 10 }` 列出候选\n"
+                    "- 再用 `history { \"history_id\": 123 }` 精准查看\n"
+                    "- 最后 `generate { \"history_id\": 123, ... }`"
+                ),
+            )
         ]
-        for it in matches[: min(10, len(matches))]:
-            hid = it.get("id")
-            hid_text = str(hid) if isinstance(hid, int) and hid > 0 else "?"
-            time_text = str(it.get("time", ""))
-            model_text = str(it.get("model", ""))
-            prompt_text = str(it.get("prompt", "")).replace("\n", " ").strip()
-            if len(prompt_text) > 80:
-                prompt_text = prompt_text[:80] + "..."
-            lines.append(f"- `{hid_text}` | {time_text} | `{model_text}` | {prompt_text}")
-
-        if len(matches) > 10:
-            lines.append(f"\n（仅展示前 10 条候选；可改用 scope=archive 或更具体的 query）")
-
-        return [TextContent(type="text", text="\n".join(lines))]
 
     if history_manager.is_empty(scope=scope):
         return [TextContent(type="text", text="暂无生成历史")]
@@ -2211,9 +2161,9 @@ PROMPTS: dict[str, dict[str, Any]] = {
             "- 额外的新上传图/外链图视为素材（Element）：由你看图提取关键元素，用文字写进 prompt。\n\n"
             "调用规则：\n"
             "1) 新建/重绘：用户说“参考这张图生成/把这图变成…” → generate(use_latest_user_image=true)。\n"
-            "2) 迭代修改：用户说“继续/再改改/加上/变成视频/上一张…” → generate(history_id=...)；不知道 ID 先 history(scope=recent, query=...) 搜索定位。\n"
+            "2) 迭代修改：用户说“继续/再改改/加上/变成视频/上一张…” → generate(history_id=...)；不知道 ID 先 history(scope=recent, limit=10) 列出候选并让用户确认。\n"
             "3) 冲突场景：用户新上传图 + “把它加到上一张/历史图里” → Base=history_id；把新图的关键元素写入 prompt（不要切换到 use_latest_user_image）。\n"
-            "4) 文本里出现图片链接/文件名/哈希：只当作 history(query=...) 的检索线索，不当作参考图传给上游。\n\n"
+            "4) 文本里出现图片链接/文件名/哈希：只当作历史线索（需要时列出 recent 候选让用户选 history_id），不当作参考图传给上游。\n\n"
             "输出要求：\n"
             "- generate 返回后，把图片/视频链接以 Markdown 形式粘贴到最终正文。\n"
             "- cache 清理历史需要 include_history=true 且 confirm=true。\n"
