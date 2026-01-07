@@ -1482,34 +1482,73 @@ DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX = (
 )
 
 
-GENERATE_DESC = (
-    """生成图片或视频。
+def _generate_desc() -> str:
+    base = """生成图片或视频。
+
+硬性规则（必须遵守）：
+1) 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里（不要只留在工具返回区）。
+2) 禁止假调用：未实际调用工具时，不得编造“正在生成/已完成/结果链接”等内容。
+3) 图生图必须显式提供参考图来源（见下方三选一）；不要凭文字猜测参考图，更不要无脑翻历史。
+4) `local_file` 只接受本地路径 / `file:///`（禁止 http(s)）。
+
+提示词写法（建议）：
+- 用单段落描述：主体、场景、构图/镜头、光线、风格、细节（可选：负面约束）。
+- 信息不足先问 1-3 个澄清问题。
+- 画面内可见文字默认简体中文，除非用户指定其他语言。
+"""
+
+    if USER_IMAGE_DIR is None:
+        reference_policy = """参考图来源（未启用“用户最新上传图导入”能力）：
+- 你无法把“当前对话里的图片附件”作为参考图传给上游。
+- 因此图生图只能用历史参考图：先 `history`（默认 recent）让用户确认，再用 `history_id` 调用 `generate`。
+"""
+    else:
+        reference_policy = """参考图来源（已启用“用户最新上传图导入”能力）：
+- 你在“当前用户消息”里确实看见了图片附件：代表“新增了一个可选参考图来源”
+  - 可选：`use_latest_user_image=true`（= 使用用户最新上传图作为参考图）
+- 用户给了本地 `file:///...` 或绝对路径（且在允许目录下）：
+  - 可选：`local_file`
+- 用户给了 `history_id`（数字）：
+  - 可选：`history_id`
+- 用户只在文字里给了 http(s) 图片链接（你并没看到附件）：
+  - 这是外链引用；提示用户改为上传附件或改用 `history_id`
+
+歧义处理（让你判断，不写死）：
+- 当“有附件”但语义可能指向历史图：请结合上下文自行判断参考图应取“附件/历史/两者都参考”。
+- 仅当你无法确信时，才问 1 句澄清；必要时先调用 `history` 让用户选 `history_id`。
+"""
+
+    tail = """
+参考参数（三选一）：
+- history_id：稳定历史序号（仅复用图片作为参考图，不支持视频作参考）
+- use_latest_user_image：使用“用户最新上传图”作为参考图（需要启用该能力）
+- local_file：本地图片路径或 `file:///`（需要启用该能力；禁止 http(s)）
+"""
+
+    return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
+
+
+def _generate_latest_upload_desc() -> str:
+    return (
+        """生成图片或视频（使用“用户最新上传图”作为参考图）。
+
+用途：
+- 当用户在“当前消息”里上传了图片附件，并希望基于这张新图继续生成/修改时，优先调用本工具。
+- 它只是把“用户最新上传图”作为一个参考图来源传入（不会替你决定语义上应该用哪张图）。
 
 规则（必须遵守）：
-1) 调用后把工具返回的图片/视频链接原样贴到最终正文里（不要只留在工具返回区）。
-2) 历史确认（严格）：未开启 Cherry 上传目录时，图生图只能基于历史记录；用户说“基于这张图/继续改/上一张”这类模糊指代时，必须先调用 `history`（默认 recent）把列表贴给用户确认，再用 `history_id` 调用 generate。
-3) 禁止“假调用”：未实际调用工具时不得编造“正在生成/结果链接”等内容。
-4) 参考图判定与选参（不要脑补，不要死查历史）：
-   - 如果用户提供了 `history_id`（数字）→ 用 `history_id`（历史参考图）
-   - 如果已开启 Cherry 上传目录（设置了 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）且你在对话里确实看见用户上传的新图片 → 默认用 `use_latest_user_image=true`（更省事）
-   - 如果用户提供了本地 `file:///...` 或绝对路径（且在允许目录下）→ 用 `local_file`
-   - 文字里的图片 URL / 描述关键词不等于“上传图片附件”，通常属于历史/外链引用：此时不要用 `use_latest_user_image`，应走 `history_id`
-5) 禁止把 http(s) 链接塞进 `local_file`（它只接受本地路径/file URI）。
-
-prompt 写法：
-- 先把用户意图改写成适合生成模型的“单段落提示词”（主体/场景/构图/光线/风格/细节/负面约束）。
-- 信息不足先问 1-3 个澄清问题。
-- 画面内可见文字默认简体中文，除非用户指定。
+1) 调用后：把工具返回的图片/视频链接原样粘贴到你的最终回复正文里（不要只留在工具返回区）。
+2) 禁止假调用：未实际调用工具时，不得编造“正在生成/已完成/结果链接”等内容。
+3) 如果用户实际上想用历史图而不是新上传图：不要强行使用本工具；请改用 `generate(history_id=...)`（必要时先 `history` 让用户选）。
+4) 若用户明确要“两张都参考/融合”：可同时传 `history_id`（历史图 + 最新上传图作为双参考）。
 
 参数：
 - model: 必填（从枚举选择）
 - prompt: 必填
-- use_latest_user_image: 可选（从 Cherry Studio 上传目录提取最新图片；需设置 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）
-- local_file: 可选（本地图片路径或 file:/// URI；仅允许 Cherry Studio 上传目录；不支持 http(s) URL）
-- history_id: 可选（稳定历史序号；仅复用图片作为参考图，不支持视频作参考）"""
-    "\n\n"
-    + _model_selection_guide()
-)
+- history_id: 可选（稳定历史序号；用于同时参考历史图）"""
+        "\n\n"
+        + _model_selection_guide()
+    )
 
 
 HISTORY_DESC = """查看生成历史（跨会话混合累计）。
@@ -1544,10 +1583,10 @@ CACHE_DESC = """缓存/历史清理工具。
 
 
 def get_tools() -> list[Tool]:
-    return [
+    tools: list[Tool] = [
         Tool(
             name="generate",
-            description=GENERATE_DESC,
+            description=_generate_desc(),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1564,12 +1603,12 @@ def get_tools() -> list[Tool]:
                     "use_latest_user_image": {
                         "type": "boolean",
                         "default": False,
-                        "description": "可选：从 Cherry Studio 上传目录提取“最新”图片作为参考图（需设置 FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR）",
+                        "description": "可选：使用“用户最新上传图”作为参考图（需要启用“用户最新上传图导入”能力）",
                     },
                     "local_file": {
                         "type": "string",
                         "pattern": "^(file://|[A-Za-z]:\\\\\\\\|/).+",
-                        "description": "可选：本地图片路径或 file:/// URI（仅允许 Cherry Studio 上传目录；不支持 http(s) URL）",
+                        "description": "可选：本地图片路径或 file:/// URI（禁止 http(s) URL；需要启用“用户最新上传图导入”能力）",
                     },
                     "history_id": {
                         "type": "integer",
@@ -1579,6 +1618,38 @@ def get_tools() -> list[Tool]:
                 "required": ["model", "prompt"],
             },
         ),
+    ]
+
+    if USER_IMAGE_DIR is not None:
+        tools.append(
+            Tool(
+                name="generate_latest_upload",
+                description=_generate_latest_upload_desc(),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "model": {
+                            "type": "string",
+                            "description": "模型名称（必须从枚举里选）",
+                            "enum": SUPPORTED_MODELS,
+                            "default": DEFAULT_MODEL,
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": "生成描述。写得越详细越好，包括：主体、场景、风格、光线、颜色、构图等。",
+                        },
+                        "history_id": {
+                            "type": "integer",
+                            "description": "可选：稳定历史序号（用于与“用户最新上传图”一起作为参考图）",
+                        },
+                    },
+                    "required": ["model", "prompt"],
+                },
+            )
+        )
+
+    tools.extend(
+        [
         Tool(
             name="history",
             description=HISTORY_DESC,
@@ -1641,7 +1712,9 @@ def get_tools() -> list[Tool]:
                 },
             },
         ),
-    ]
+        ]
+    )
+    return tools
 
 
 async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
@@ -2183,6 +2256,10 @@ async def call_tool(name: str, args: dict):
         return await handle_cache(args)
     elif name == "generate":
         return await handle_generate(args)
+    elif name == "generate_latest_upload":
+        merged = dict(args or {})
+        merged["use_latest_user_image"] = True
+        return await handle_generate(merged)
     else:
         return [TextContent(type="text", text=f"未知工具: {name}")]
 
