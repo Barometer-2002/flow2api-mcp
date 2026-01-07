@@ -1529,20 +1529,6 @@ def _generate_desc() -> str:
     return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
 
 
-def _generate_latest_upload_desc() -> str:
-    return (
-        """生成图片或视频（参考图固定为“用户最新上传图”）。
-
-输出要求：调用后把工具返回的图片/视频链接使用MD链接格式粘贴到最终回复正文里。
-
-参数：
-- model（必填）
-- prompt（必填）"""
-        "\n\n"
-        + _model_selection_guide()
-    )
-
-
 HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
 用途：搜索/定位 history_id（供 generate.history_id 使用）。
@@ -1610,30 +1596,6 @@ def get_tools() -> list[Tool]:
             },
         ),
     ]
-
-    if USER_IMAGE_DIR is not None:
-        tools.append(
-            Tool(
-                name="generate_latest_upload",
-                description=_generate_latest_upload_desc(),
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "model": {
-                            "type": "string",
-                            "description": "模型名称（必须从枚举里选）",
-                            "enum": SUPPORTED_MODELS,
-                            "default": DEFAULT_MODEL,
-                        },
-                        "prompt": {
-                            "type": "string",
-                            "description": "生成描述。写得越详细越好，包括：主体、场景、风格、光线、颜色、构图等。",
-                        },
-                    },
-                    "required": ["model", "prompt"],
-                },
-            )
-        )
 
     tools.extend(
         [
@@ -2343,10 +2305,6 @@ async def call_tool(name: str, args: dict):
         return await handle_cache(args)
     elif name == "generate":
         return await handle_generate(args)
-    elif name == "generate_latest_upload":
-        merged = dict(args or {})
-        merged["use_latest_user_image"] = True
-        return await handle_generate(merged)
     else:
         return [TextContent(type="text", text=f"未知工具: {name}")]
 

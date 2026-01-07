@@ -54,10 +54,6 @@ pip install -r requirements.txt
 - 查最近历史：`history { "scope": "recent", "limit": 5 }`
 - 清理本机缓存：`cache { "action": "clear", "include_history": false }`
 
-## MCP Prompts（可选）
-
-本 MCP 提供可复用的 Prompts（模板提示），用于让客户端/模型更稳定地理解“参考图选择/失败排查/提示词改写”等流程；是否可用取决于你的 MCP 客户端是否支持 Prompts。
-
 ## 自定义模型配置（`mcp_server/models.json`）
 
 如果你想使用其他openai格式的模型，或调整默认模型与选型指南，可编辑 `mcp_server/models.json` 文件尝试，不保证兼容性。

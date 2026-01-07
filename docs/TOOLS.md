@@ -95,7 +95,3 @@ flowchart TD
 
 注意：
 - `clear/prune` 会删除本地缓存文件（`mcp_server/url_cache/` 等）。
-
-## MCP Prompts（可选）
-
-本 MCP 提供可复用的 Prompts（模板提示），用于让客户端/模型更稳定地理解“参考图选择/失败排查/提示词改写”等流程；是否可用取决于你的 MCP 客户端是否支持 Prompts。
