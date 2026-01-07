@@ -10,6 +10,11 @@ import mcp_server.server as server
 
 
 class TestGeneratePayload(unittest.TestCase):
+    """Regression tests for upstream parsing + MCP tool behavior.
+
+    Run:
+        python -m unittest -q
+    """
     def test_openai_stream_parsing_ignores_empty_choices(self) -> None:
         class FakeResponse:
             status_code = 200
