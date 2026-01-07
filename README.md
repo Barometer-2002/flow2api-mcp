@@ -2,12 +2,12 @@
 
 一个基于 stdio 的 MCP 服务：将 Flow2API / OpenAI-compatible 上游封装为 MCP 工具（`generate` / `history` / `cache`）。
 
-> 说明：这是个人项目，**不保证兼容性与长期维护**。若你对稳定性要求更高，建议优先使用上游原生调用方式。
+> 说明：这是个人项目，**不保证兼容性与长期维护**。若你对稳定性要求更高，建议优先使用上游原生调用方式。目前只在**本地**搭配 **Cherry Studio** 客户端使用。
 
 工具：
 - `generate`：文生图 / 文生视频；也支持用历史图片继续生成
 - `history`：查看跨会话混合的生成历史（用稳定 `history_id` 复用）
-- `cache`：查看/清理/裁剪本机媒体缓存（可选）
+- `cache`：查看/清理/裁剪本机媒体缓存
 
 
 ## 安装
@@ -25,43 +25,24 @@ pip install -r requirements.txt
 ## 设计速览（缓存 / 本地上传）
 
 - 本机媒体缓存（推荐）：开启 `FLOW2API_MCP_URL_CACHE=1` 后，MCP 会把上游返回的图片/视频链接下载到本地 `mcp_server/url_cache/`，并通过内置 HTTP（默认 `http://127.0.0.1:46262/mcp-cache/...`）提供稳定访问，避免上游临时链接失效。
-- Cherry Studio 本地上传图（推荐）：由于 MCP 无法直接读取对话附件，本项目通过读取 Cherry Studio 上传目录（`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）来“导入用户最新上传图”，用于图生图参考，未配置则只能通过历史生图指定参考图。
+- 
+- Cherry Studio 本地附件上传参考图（推荐）：由于 MCP 无法直接读取对话附件，本项目通过读取 Cherry Studio 本地附件目录（`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）来“导入用户最新上传图”，用于图生图参考，未配置则只能通过历史生图指定参考图。
 - 全部环境变量与配置选项见 `docs/CONFIG.md`。
 
-## MCP 客户端配置（通用 JSON）
-
-```json
-{
-  "mcpServers": {
-    "flow2api": {
-      "command": "python",
-      "args": ["-m", "mcp_server"],
-      "cwd": "/ABS/PATH/TO/flow2api-mcp",
-      "env": {
-        "FLOW2API_BASE_URL": "http://127.0.0.1:8000",
-        "FLOW2API_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
-
-说明：
-- `cwd` 必须指向本项目根目录（例如 `D:\\github\\flow2api-mcp`）
-- Windows 路径在 JSON 里用 `\\`
-- 配置必须是纯 JSON（不能写 `//` 注释、不能有多余逗号）
-
-## Cherry Studio 配置（表单）
+## Cherry Studio MCP配置
 
 - 类型：`标准输入/输出 (stdio)`
 - 命令：你的 Python 解释器路径
-- 参数（推荐）：`-m mcp_server`
-  - 如果客户端不支持多参数输入，使用脚本路径：`D:\\github\\flow2api-mcp\\mcp_server\\server.py`
+- 参数：使用脚本路径：`D:\\github\\flow2api-mcp\\mcp_server\\server.py`
 - 环境变量：至少填 `FLOW2API_BASE_URL`、`FLOW2API_API_KEY`
 - 推荐补充以下环境变量：
   - 本机缓存：`FLOW2API_MCP_URL_CACHE=1`
   - Cherry Studio 上传图目录：`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR=C://Users//<YOUR_USERNAME>//AppData//Roaming//CherryStudio//Data//Files`
-- 超时：建议设置为 `120` 秒或更高
+- 长时间运行模式： `开启`
+- 超时：生成耗时，建议设置为 `180` 秒或更高
+
+> 说明：由于MCP服务是临时进程，为了本地缓存链接的正常显示，需要`开启`“长时间运行模式”。
+> 若你使用其他支持 MCP 的客户端，请自行解决“本机缓存链接访问”问题。
 
 ## 工具速览
 
@@ -88,6 +69,8 @@ pip install -r requirements.txt
 ```
 
 ## 自定义模型配置（`mcp_server/models.json`）
+
+如果你想使用其他openai格式的模型，或调整默认模型与选型指南，可编辑 `mcp_server/models.json` 文件尝试，不保证兼容性。
 
 模型列表与选型说明由 `mcp_server/models.json` 管理：
 - `models`：允许使用的模型名称列表（也用于 `generate.model` 的校验）
