@@ -2,12 +2,13 @@
 
 一个基于 stdio 的 MCP 服务：将 Flow2API / OpenAI-compatible 上游封装为 MCP 工具（`generate` / `history` / `cache`）。
 
+> 说明：这是个人项目，**不保证兼容性与长期维护**。若你对稳定性要求更高，建议优先使用上游原生调用方式。
+
 工具：
 - `generate`：文生图 / 文生视频；也支持用历史图片继续生成
 - `history`：查看跨会话混合的生成历史（用稳定 `history_id` 复用）
 - `cache`：查看/清理/裁剪本机媒体缓存（可选）
 
-> 说明：这是个人项目，**不保证兼容性与长期维护**。若你对稳定性要求更高，建议优先使用上游原生调用方式。
 
 ## 安装
 
@@ -20,6 +21,11 @@ pip install -r requirements.txt
 仅需 2 个环境变量：
 - `FLOW2API_BASE_URL`：上游服务地址（默认 `http://localhost:8000`）
 - `FLOW2API_API_KEY`：API Key（不要带 `Bearer ` 前缀）
+
+## 设计速览（缓存 / 本地上传）
+
+- 本机媒体缓存（可选）：开启 `FLOW2API_MCP_URL_CACHE=1` 后，MCP 会把上游返回的图片/视频链接下载到本地 `mcp_server/url_cache/`，并通过内置 HTTP（默认 `http://127.0.0.1:46262/mcp-cache/...`）提供稳定访问，避免上游临时链接失效。
+- Cherry Studio 本地上传图（可选）：由于 MCP 无法直接读取对话附件，本项目通过读取 Cherry Studio 上传目录（`FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）来“导入用户最新上传图”，用于图生图参考（`use_latest_user_image=true` 或 `local_file=file:///...`）。
 
 ## MCP 客户端配置（通用 JSON）
 
@@ -77,7 +83,7 @@ pip install -r requirements.txt
 4) cache 删除历史必须 confirm=true（include_history=true 且 clear/prune）。
 ```
 
-## 模型配置（`mcp_server/models.json`）
+## 自定义模型配置（`mcp_server/models.json`）
 
 模型列表与选型说明由 `mcp_server/models.json` 管理：
 - `models`：允许使用的模型名称列表（也用于 `generate.model` 的校验）
