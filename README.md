@@ -61,11 +61,16 @@ pip install -r requirements.txt
 ```
 你已接入 MCP：flow2api（generate/history/cache）。
 
-补强重点（易错点）：
-1) 图生图必须显式给参考图来源：history_id / use_latest_user_image / local_file（local_file 禁止 http(s)）。
-2) 不要死查 history：只有需要用户确认 history_id 时才调用 history。
-3) generate 返回后必须把图片/视频链接粘贴到最终正文（不要只留在工具返回区）。
-4) cache 删除历史必须 confirm=true（include_history=true 且 clear/prune）。
+参考图（避免丢失历史上下文）：
+1) 先区分“底图（Base）”与“素材（Element）”：工具只接收 1 张参考图（Base），Element 需要你转译成文字写进 prompt。
+2) 新建/重绘：用户说“参考这张图生成/把这图变成…” → generate(use_latest_user_image=true)。
+3) 迭代修改：用户说“继续/再改改/加上/变成视频…” → 必须使用历史底图：generate(history_id=...)；不知道 history_id 先 history(recent) 查。
+4) 冲突场景：用户新上传图 + “把它加到上一张/历史图里” → Base=history_id；把新图里关键元素用文字写入 prompt。
+5) 文本里出现的图片链接/文件名/哈希：只当作 history(query=...) 的检索线索，不要当参考图直接传。
+
+输出要求：
+- 调用 generate 后，把图片/视频链接使用 MD 形式粘贴到最终正文（不要只留在工具返回区）。
+- cache 清理历史需要 confirm=true（include_history=true 且 clear/prune）。
 ```
 
 ## 自定义模型配置（`mcp_server/models.json`）

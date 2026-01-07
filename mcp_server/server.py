@@ -1484,10 +1484,10 @@ def _generate_desc() -> str:
     base = """生成图片或视频。
 
 输出要求：
-- 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里。
+- 调用后：把工具返回的图片/视频链接使用MD链接格式粘贴到最终回复正文里。
 
 参考图参数（二选一）：
-- history_id：使用历史记录中的图片作为参考图（配合 history 工具获取/搜索）
+- history_id：使用历史记录中的图片作为参考图（适合“继续/再改/迭代/变视频”等场景；配合 history 获取/搜索）
 """
 
     if USER_IMAGE_DIR is None:
@@ -1500,7 +1500,7 @@ def _generate_desc() -> str:
 """
         return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
 
-    reference_policy = """- use_latest_user_image=true：使用“用户最新上传图”作为参考图
+    reference_policy = """- use_latest_user_image=true：使用“用户最新上传图”作为参考图（适合“新建/重绘/把这张图变成…”等场景）
 """
 
     tail = """
@@ -1517,7 +1517,7 @@ def _generate_latest_upload_desc() -> str:
     return (
         """生成图片或视频（参考图固定为“用户最新上传图”）。
 
-输出要求：调用后把工具返回的图片/视频链接原样粘贴到最终回复正文里。
+输出要求：调用后把工具返回的图片/视频链接使用MD链接格式粘贴到最终回复正文里。
 
 参数：
 - model（必填）
@@ -1529,7 +1529,7 @@ def _generate_latest_upload_desc() -> str:
 
 HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
-用途：给 generate 提供 history_id。
+用途：搜索/定位 history_id（供 generate.history_id 使用）。
 
 参数：
 - history_id: 指定则只返回该条

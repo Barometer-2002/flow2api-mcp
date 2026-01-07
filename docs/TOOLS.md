@@ -17,8 +17,7 @@ flowchart TD
     NeedRef -->|否| T2[纯文本生成]
     NeedRef -->|是| RefParam{是否提供参考参数?}
     RefParam -->|history_id| FromHist[从历史取图→转 data_uri→发给上游]
-    RefParam -->|local_file| FromLocal[校验本地路径→读取→转 data_uri→发给上游]
-    RefParam -->|use_latest_user_image=true| FromUpload[需开启 Cherry 目录→取最新上传→转 data_uri→发给上游]
+    RefParam -->|use_latest_user_image=true| FromUpload[需启用“用户最新上传图导入”→取最新上传→转 data_uri→发给上游]
     RefParam -->|都没有| Ask[先 history(recent) 让用户确认→再用 history_id 调 generate]
   end
 
@@ -45,19 +44,16 @@ flowchart TD
 
 可选参数（用于“带图”继续生成）：
 - `history_id`：稳定历史序号（来自 `history` 返回列表中的标题序号；**不会**随列表变化）
-- `use_latest_user_image`：从 Cherry Studio 上传目录提取“最新文件”作为参考图（需要设置 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）
-- `local_file`：本地图片路径或 `file:///` URI（仅允许 Cherry Studio 上传目录；不支持 http(s) 链接；也需要设置 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）
+- `use_latest_user_image`：从“用户上传目录”提取“最新文件”作为参考图（需要设置 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`）
 
 常见用法示例：
 - 文生图：`generate { "model": "gemini-3.0-pro-image-landscape", "prompt": "..." }`
 - 文生视频：`generate { "model": "veo_3_1_t2v_fast_landscape", "prompt": "..." }`
 - 用历史图片继续生图：`generate { "history_id": 123, "model": "gemini-3.0-pro-image-landscape", "prompt": "..." }`
 - 取最新上传图继续生图：`generate { "use_latest_user_image": true, "model": "gemini-3.0-pro-image-landscape", "prompt": "..." }`
-- 指定本地上传图继续生图：`generate { "local_file": "file:///C:/.../xxx.png", "model": "gemini-3.0-pro-image-landscape", "prompt": "..." }`
 
 注意：
 - `history_id` 仅用于“复用图片作为参考图”，不支持把视频当作参考图。
-- `use_latest_user_image` 与 `local_file` 只能二选一。
 - 视频模型是否可用/返回格式取决于上游：本项目期望上游最终给出可访问的 `.mp4/.webm` 链接，并会统一包装为 `[video](url)`。
 - 视频生成通常耗时更长、失败重试成本更高，且不同上游的任务轮询/返回形态差异较大：如你对稳定性要求更高，建议优先使用上游原生调用方式（例如直接调用 Flow2API/OpenAI-compatible 接口）。
 
@@ -107,10 +103,14 @@ flowchart TD
 ```
 你已接入 MCP：flow2api（generate/history/cache）。
 
-补强重点（易错点）：
-1) 图生图必须显式给参考图来源：history_id / use_latest_user_image / local_file（local_file 禁止 http(s)）。
-2) 不要死查 history：只有需要用户确认 history_id 时才调用 history。
-3) generate 返回后必须把图片/视频链接粘贴到最终正文（不要只留在工具返回区）。
-4) cache 删除历史必须 confirm=true（include_history=true 且 clear/prune）。
-```
+参考图（避免丢失历史上下文）：
+1) 先区分“底图（Base）”与“素材（Element）”：工具只接收 1 张参考图（Base），Element 需要你转译成文字写进 prompt。
+2) 新建/重绘：用户说“参考这张图生成/把这图变成…” → generate(use_latest_user_image=true)。
+3) 迭代修改：用户说“继续/再改改/加上/变成视频…” → generate(history_id=...)；不知道 history_id 先 history(recent) 查。
+4) 冲突场景：用户新上传图 + “把它加到上一张/历史图里” → Base=history_id；把新图里关键元素用文字写入 prompt。
+5) 文本里出现的图片链接/文件名/哈希：只当作 history(query=...) 的检索线索，不要当参考图直接传。
 
+输出要求：
+- 调用 generate 后把图片/视频链接粘贴到最终正文（不要只留在工具返回区）。
+- cache 清理历史需要 include_history=true 且 confirm=true。
+```
