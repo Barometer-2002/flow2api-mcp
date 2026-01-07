@@ -18,9 +18,15 @@ dist/
 *.swo
 *~
 .DS_Store
+.stfolder/
 
 # MCP runtime artifacts
 mcp_server/history.json
 mcp_server/history_archive.json
 mcp_server/url_cache.json
 mcp_server/url_cache/
+mcp_server/upstream_debug_last.txt
+scripts/upstream_inspect_*.txt
+
+# Local backups
+mcp_server/models.json.bak
