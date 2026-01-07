@@ -41,6 +41,11 @@ def _apply_prompt_template(template: str, arguments: dict[str, str] | None) -> s
     return out
 
 
+def _debug(msg: str) -> None:
+    if DEBUG_LOGS:
+        print(f"[MCP][debug] {msg}", file=sys.stderr)
+
+
 # -----------------------------
 # Config
 # -----------------------------
@@ -55,6 +60,7 @@ URL_CACHE_INDEX_FILE = PROJECT_ROOT / "url_cache.json"
 URL_CACHE_ENABLED = os.environ.get("FLOW2API_MCP_URL_CACHE", "0") != "0"
 URL_CACHE_MAX_ENTRIES = int(os.environ.get("FLOW2API_MCP_URL_CACHE_MAX_ENTRIES", "200"))
 URL_CACHE_MAX_FILE_BYTES = int(os.environ.get("FLOW2API_MCP_URL_CACHE_MAX_FILE_BYTES", "100")) * 1024 * 1024
+DEBUG_LOGS = os.environ.get("FLOW2API_MCP_DEBUG", "0") != "0"
 
 # User image import (Cherry Studio uploads)
 # Disabled by default. Enable by setting FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR.
@@ -216,7 +222,7 @@ class HistoryManager:
                     data = json.load(f)
                 if isinstance(data, list):
                     self._recent = deque(data, maxlen=MAX_HISTORY_RECENT_SIZE)
-                print(f"[MCP] 已加载 recent={len(self._recent)} 条历史记录", file=sys.stderr)
+                _debug(f"history loaded: recent={len(self._recent)}")
             except Exception as exc:
                 print(f"[MCP] 加载历史记录失败: {exc}", file=sys.stderr)
                 self._recent = deque(maxlen=MAX_HISTORY_RECENT_SIZE)
@@ -227,7 +233,7 @@ class HistoryManager:
                     data = json.load(f)
                 if isinstance(data, list):
                     self._archive = deque(data, maxlen=MAX_HISTORY_ARCHIVE_SIZE)
-                print(f"[MCP] 已加载 archive={len(self._archive)} 条历史记录", file=sys.stderr)
+                _debug(f"history loaded: archive={len(self._archive)}")
             except Exception as exc:
                 print(f"[MCP] 加载历史归档失败: {exc}", file=sys.stderr)
                 self._archive = deque(maxlen=MAX_HISTORY_ARCHIVE_SIZE)
@@ -942,16 +948,17 @@ async def download_url_as_base64(url: str) -> Optional[str]:
         if URL_CACHE_ENABLED:
             cached = url_cache.get_data_uri(url)
             if cached:
-                print(f"[MCP] URL缓存命中: {url}", file=sys.stderr)
+                _debug(f"url_cache hit: {url}")
                 return cached
 
         client = await http_client.get_client()
-        print(f"[MCP] 下载图片: {url}", file=sys.stderr)
+        _debug(f"download: {url}")
         resp = await client.get(url, timeout=30, headers=_auth_headers_for_url(url))
-        print(f"[MCP] 响应状态: {resp.status_code}", file=sys.stderr)
+        _debug(f"download status: {resp.status_code}")
 
         if resp.status_code != 200:
-            print(f"[MCP] 下载失败: {resp.status_code} - {resp.text[:200]}", file=sys.stderr)
+            print(f"[MCP] 下载失败 HTTP {resp.status_code}: {url}", file=sys.stderr)
+            _debug(f"download error body: {resp.text[:200]}")
             return None
 
         ct = resp.headers.get("content-type", "")
@@ -959,7 +966,7 @@ async def download_url_as_base64(url: str) -> Optional[str]:
         if URL_CACHE_ENABLED:
             url_cache.put(url, resp.content, mime=mime, ext=ext)
 
-        print(f"[MCP] 下载成功, 大小: {len(resp.content)} bytes", file=sys.stderr)
+        _debug(f"download ok: {len(resp.content)} bytes")
         data = base64.b64encode(resp.content).decode()
         return f"data:{mime};base64,{data}"
     except Exception as exc:
@@ -1312,9 +1319,8 @@ async def _cache_url_media(url: str) -> bool:
         mime, ext = _guess_mime_and_ext(url, ct)
 
         if len(resp.content) > URL_CACHE_MAX_FILE_BYTES:
-            print(
-                f"[MCP] 跳过缓存(超过大小限制 {URL_CACHE_MAX_FILE_BYTES} bytes): {url} ({len(resp.content)} bytes)",
-                file=sys.stderr,
+            _debug(
+                f"skip cache (too large): limit={URL_CACHE_MAX_FILE_BYTES} size={len(resp.content)} url={url}"
             )
             return False
 
@@ -1684,10 +1690,9 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
             data_uri, local_url = await _import_local_file(str(p))
             if data_uri:
                 images.append(data_uri)
-                mcp_logs.append("user_image: imported latest 1 image")
             if local_url:
                 history_manager.add_success("user_image", f"user_image: {p.name}", [local_url])
-                mcp_logs.append("user_image: recorded to history")
+            mcp_logs.append("参考图: 用户最新上传图")
         except Exception as exc:
             return [TextContent(type="text", text=f"❌ 用户图片导入失败: {exc}")]
 
@@ -1714,11 +1719,10 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         except Exception:
             return [TextContent(type="text", text="错误: history_id 必须是整数")]
 
-        mcp_logs.append(f"history_id: {item_id}")
+        mcp_logs.append(f"参考图: history_id={item_id}")
         history_item = history_manager.get_by_id(item_id, scope="archive")
         if history_item:
             urls_in_history = list(history_item.get("urls", []) or [])
-            mcp_logs.append(f"history urls: {len(urls_in_history)}")
             hits = 0
             misses = 0
             for url in urls_in_history:
@@ -1733,9 +1737,10 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
                     images.append(b64)
                     if "_i2v_" in model and len(images) >= 2:
                         break
-            mcp_logs.append(f"reference images: {len(images)} (cache_hit={hits}, cache_miss={misses})")
+            mcp_logs.append(f"参考图数量: {len(images)}")
+            _debug(f"reference images: {len(images)} (cache_hit={hits}, cache_miss={misses})")
         else:
-            mcp_logs.append("history_id invalid (no such item)")
+            mcp_logs.append("参考图: history_id 未找到")
 
     prompt = args.get("prompt", "")
     if not prompt:
@@ -1764,9 +1769,9 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         for img in images:
             content.append({"type": "image_url", "image_url": {"url": img}})
     elif used_history_ref:
-        mcp_logs.append("⚠️ 未能获取到可用参考图（history_id），将按纯文本生成。")
+        mcp_logs.append("参考图: 未获取到（history_id），已按纯文本生成。")
 
-    mcp_logs.append(f"model: {model}")
+    mcp_logs.append(f"模型: {model}")
 
     if model not in SUPPORTED_MODELS:
         suggestions = difflib.get_close_matches(model, SUPPORTED_MODELS, n=3, cutoff=0.2)
@@ -1808,7 +1813,7 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
     retry_count = max(0, min(int(GENERATE_RETRY_COUNT), 10))
     max_attempts = 1 + retry_count
     if retry_count > 0:
-        mcp_logs.append(f"auto retry: {retry_count} (sleep 2s, same model)")
+        mcp_logs.append(f"自动重试: {retry_count} 次（间隔 2s）")
 
     status = 0
     reasoning_text = ""
@@ -1818,7 +1823,7 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
 
     while True:
         attempt += 1
-        mcp_logs.append(f"attempt {attempt}: {used_model}")
+        mcp_logs.append(f"尝试: {attempt}/{max_attempts}")
         status, reasoning_text, content_text, err_text = await _flow2api_stream_chat_completions(
             client,
             base_url=base_url,
@@ -1832,16 +1837,16 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
 
         ok = status == 200 and bool(content_text.strip())
         if ok:
-            mcp_logs.append("status: 200 OK")
+            mcp_logs.append("状态: 200 OK")
             break
         if status != 200:
             brief_err = (err_text.strip() or reasoning_text.strip() or "")[:120].replace("\n", " ")
             if brief_err:
-                mcp_logs.append(f"status: HTTP {status} ({brief_err})")
+                mcp_logs.append(f"状态: HTTP {status}（{brief_err}）")
             else:
-                mcp_logs.append(f"status: HTTP {status}")
+                mcp_logs.append(f"状态: HTTP {status}")
         else:
-            mcp_logs.append("status: 200 but empty content")
+            mcp_logs.append("状态: 200 但无可用结果")
             # Empty parsing results are not retryable; retrying wastes quota.
             if err_text.strip().startswith("empty content extracted"):
                 break
@@ -1849,7 +1854,7 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         if attempt >= max_attempts:
             break
 
-        mcp_logs.append("retry after 2s (same model)")
+        mcp_logs.append("等待 2s 后重试")
         await asyncio.sleep(2)
 
     if status != 200:
@@ -1872,9 +1877,7 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
 
     urls = extract_urls(content_text)
     data_urls = _extract_data_image_urls(content_text)
-    mcp_logs.append(f"extracted urls: {len(urls)}")
-    if data_urls:
-        mcp_logs.append(f"extracted data_urls: {len(data_urls)}")
+    mcp_logs.append(f"结果解析: urls={len(urls)}, data_urls={len(data_urls)}")
 
     # If upstream returned data:image/...;base64,..., store them locally and replace in output.
     data_url_map: dict[str, str] = {}
@@ -1901,7 +1904,7 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
     cached_count = 0
     if URL_CACHE_ENABLED and urls:
         cached_count = await _cache_urls(urls)
-        mcp_logs.append(f"cached urls: {cached_count}/{len(urls)}")
+        mcp_logs.append(f"本机缓存: {cached_count}/{len(urls)}")
 
     rendered_content = content_text
     if data_url_map:
@@ -1912,9 +1915,9 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
     rendered_content = _wrap_bare_mcp_cache_images(rendered_content)
     if URL_CACHE_ENABLED:
         if _cache_http_base_url:
-            mcp_logs.append(f"local cache base: {_cache_http_base_url}")
+            mcp_logs.append(f"本机缓存地址: {_cache_http_base_url}")
         elif url_cache.size() > 0:
-            mcp_logs.append("local cache: enabled")
+            mcp_logs.append("本机缓存: 已启用")
 
     final_text = rendered_content.strip() or "无结果"
     mcp_block = ""
