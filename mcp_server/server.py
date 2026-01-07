@@ -1485,44 +1485,55 @@ DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX = (
 def _generate_desc() -> str:
     base = """生成图片或视频。
 
-硬性规则（必须遵守）：
-1) 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里（不要只留在工具返回区）。
-2) 禁止假调用：未实际调用工具时，不得编造“正在生成/已完成/结果链接”等内容。
-3) 图生图必须显式提供参考图来源（见下方三选一）；不要凭文字猜测参考图，更不要无脑翻历史。
-4) `local_file` 只接受本地路径 / `file:///`（禁止 http(s)）。
+输出要求（必须遵守）：
+- 必须真实调用工具；禁止编造“正在生成/已完成/结果链接”等内容。
+- 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里（不要只留在工具返回区）。
 
-提示词写法（建议）：
-- 用单段落描述：主体、场景、构图/镜头、光线、风格、细节（可选：负面约束）。
+参考图（图生图/图生视频等）：
+- 只要用户需要“基于某张图继续”，就必须显式提供可用参考图来源；不要仅凭文字臆测参考图。
+- 若用户提供了明确来源（history_id / local_file / use_latest_user_image），优先按用户明确来源执行。
+- 若用户“上传了新图”但语义是“改上一张/改历史图”：仍应以 history_id 为主；新图只有在语义指向“用新图改/融合”时才作为参考。
+- 仅在你无法判断时：问 1 句澄清；只有需要用户选 history_id 时才调用 history。
+
+提示词（建议写法）：
+- 单段落写清：主体、场景、构图/镜头、光线、风格、细节（可选：负面约束）。
 - 信息不足先问 1-3 个澄清问题。
-- 画面内可见文字默认简体中文，除非用户指定其他语言。
 """
 
     if USER_IMAGE_DIR is None:
-        reference_policy = """参考图来源（未启用“用户最新上传图导入”能力）：
-- 你无法把“当前对话里的图片附件”作为参考图传给上游。
-- 因此图生图只能用历史参考图：先 `history`（默认 recent）让用户确认，再用 `history_id` 调用 `generate`。
-"""
-    else:
-        reference_policy = """参考图来源（已启用“用户最新上传图导入”能力）：
-- 你在“当前用户消息”里确实看见了图片附件：代表“新增了一个可选参考图来源”
-  - 可选：`use_latest_user_image=true`（= 使用用户最新上传图作为参考图）
-- 用户给了本地 `file:///...` 或绝对路径（且在允许目录下）：
-  - 可选：`local_file`
-- 用户给了 `history_id`（数字）：
-  - 可选：`history_id`
-- 用户只在文字里给了 http(s) 图片链接（你并没看到附件）：
-  - 这是外链引用；提示用户改为上传附件或改用 `history_id`
+        reference_policy = """参考图能力：未启用“用户最新上传图”导入。
 
-歧义处理（让你判断，不写死）：
-- 当“有附件”但语义可能指向历史图：请结合上下文自行判断参考图应取“附件/历史/两者都参考”。
-- 仅当你无法确信时，才问 1 句澄清；必要时先调用 `history` 让用户选 `history_id`。
+可用来源：
+- history_id（来自 history）
+
+使用要求：
+- 当前对话即使出现图片附件，你也无法把附件作为参考图传给上游；不要声称“将用附件作为参考图”。
+"""
+        tail = """
+参数：
+- model（必填）
+- prompt（必填）
+- history_id（可选；参考图来源；不填表示纯文本生成）
+"""
+        return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
+
+    reference_policy = """参考图能力：已启用“用户最新上传图”导入。
+
+可用来源（按语义选择，并非固定优先级）：
+- use_latest_user_image=true：使用“用户最新上传图”作为参考图
+- local_file=...：本地路径或 file:///（必须在允许目录内）
+- history_id=...：历史记录中的图片
+
+约束：
+- 禁止把 http(s) 链接塞进 local_file（local_file 只接受本地路径/file URI）。
+- 文字里的图片 URL 属于“外链文本引用”，不是“可用参考图”；应提示用户上传图片或改用 history_id。
 """
 
     tail = """
-参考参数（三选一）：
-- history_id：稳定历史序号（仅复用图片作为参考图，不支持视频作参考）
-- use_latest_user_image：使用“用户最新上传图”作为参考图（需要启用该能力）
-- local_file：本地图片路径或 `file:///`（需要启用该能力；禁止 http(s)）
+参数：
+- model（必填）
+- prompt（必填）
+- history_id / use_latest_user_image / local_file（可选；参考图来源；不填表示纯文本生成）
 """
 
     return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
@@ -1530,22 +1541,21 @@ def _generate_desc() -> str:
 
 def _generate_latest_upload_desc() -> str:
     return (
-        """生成图片或视频（使用“用户最新上传图”作为参考图）。
+        """生成图片或视频（强制使用“用户最新上传图”作为参考图）。
 
-用途：
-- 当用户在“当前消息”里上传了图片附件，并希望基于这张新图继续生成/修改时，优先调用本工具。
-- 它只是把“用户最新上传图”作为一个参考图来源传入（不会替你决定语义上应该用哪张图）。
+何时使用：
+- 你已经明确判断：用户要基于“刚上传的新图”继续生成/修改。
 
-规则（必须遵守）：
-1) 调用后：把工具返回的图片/视频链接原样粘贴到你的最终回复正文里（不要只留在工具返回区）。
-2) 禁止假调用：未实际调用工具时，不得编造“正在生成/已完成/结果链接”等内容。
-3) 如果用户实际上想用历史图而不是新上传图：不要强行使用本工具；请改用 `generate(history_id=...)`（必要时先 `history` 让用户选）。
-4) 若用户明确要“两张都参考/融合”：可同时传 `history_id`（历史图 + 最新上传图作为双参考）。
+输出要求：
+- 调用后把工具返回的图片/视频链接原样粘贴到最终回复正文里。
+
+可选：
+- 若用户明确要“在历史某张图上融合新图”：可同时传 history_id（= 双参考）。
 
 参数：
-- model: 必填（从枚举选择）
-- prompt: 必填
-- history_id: 可选（稳定历史序号；用于同时参考历史图）"""
+- model（必填）
+- prompt（必填）
+- history_id（可选）"""
         "\n\n"
         + _model_selection_guide()
     )
@@ -1553,25 +1563,27 @@ def _generate_latest_upload_desc() -> str:
 
 HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
-规则（必须遵守）：
-1) 用户“明确要求查看历史”时，调用后把返回的历史列表粘贴到最终正文里。
-2) 如果调用 history 只是为了“定位参考图”（给 generate 用的 history_id），默认不要贴全列表：只输出你最终选中的那条（history_id + 参考图/链接），然后继续调用 generate。
-3) 只有在以下情况才把列表/候选贴出来让用户确认：找不到目标，或候选不唯一。
-4) 禁止“假调用”：未实际调用工具时不得编造历史列表。
+用法：
+- 用户明确要求“查看历史”：输出完整列表。
+- 你只是为了给 generate 找参考图：默认不要贴全列表，只贴你最终选中的那条（history_id + 参考图/链接）；找不到/不唯一才贴候选让用户确认。
+
+输出要求：
+- 禁止假调用：未实际调用工具时不得编造历史列表。
 
 参数：
-- history_id: 可选（指定则只返回该条记录；用于“查某一条历史信息”，避免输出全列表）
-- query: 可选（关键词搜索：匹配不唯一则返回候选摘要；唯一则直接返回单条）
-- keyword: 可选（同 query，兼容别名）
+- history_id: 指定则只返回该条（用于“查某一条历史信息”）
+- query / keyword: 关键词搜索（不唯一返回候选摘要；唯一返回单条）
 - limit: 返回条数（默认 5）
 - scope: recent / archive（默认 recent）"""
 
 
 CACHE_DESC = """缓存/历史清理工具。
 
-规则（必须遵守）：
-1) 禁止“假调用”：未实际调用工具时不得编造“已清理/已裁剪/状态”。
-2) 删除历史记录需要显式确认：当 include_history=true 且 action=clear/prune 时，必须传 confirm=true。
+输出要求：
+- 禁止假调用：未实际调用工具时不得编造“已清理/已裁剪/状态”。
+
+安全确认：
+- 当 include_history=true 且 action=clear/prune 时，必须传 confirm=true（防误删）。
 
 参数：
 - action: status / clear / prune（默认 status）
@@ -1583,38 +1595,46 @@ CACHE_DESC = """缓存/历史清理工具。
 
 
 def get_tools() -> list[Tool]:
+    generate_properties: dict[str, object] = {
+        "model": {
+            "type": "string",
+            "description": "模型名称（必须从枚举里选）",
+            "enum": SUPPORTED_MODELS,
+            "default": DEFAULT_MODEL,
+        },
+        "prompt": {
+            "type": "string",
+            "description": "生成描述（建议单段落：主体/场景/构图/光线/风格/细节）。",
+        },
+        "history_id": {
+            "type": "integer",
+            "description": "可选：稳定历史序号（在 history 列表中显示）；不会随列表变化",
+        },
+    }
+
+    if USER_IMAGE_DIR is not None:
+        generate_properties.update(
+            {
+                "use_latest_user_image": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "可选：使用“用户最新上传图”作为参考图",
+                },
+                "local_file": {
+                    "type": "string",
+                    "pattern": "^(file://|[A-Za-z]:\\\\\\\\|/).+",
+                    "description": "可选：本地图片路径或 file:/// URI（禁止 http(s) URL）",
+                },
+            }
+        )
+
     tools: list[Tool] = [
         Tool(
             name="generate",
             description=_generate_desc(),
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "model": {
-                        "type": "string",
-                        "description": "模型名称（必须从枚举里选）",
-                        "enum": SUPPORTED_MODELS,
-                        "default": DEFAULT_MODEL,
-                    },
-                    "prompt": {
-                        "type": "string",
-                        "description": "生成描述。写得越详细越好，包括：主体、场景、风格、光线、颜色、构图等。",
-                    },
-                    "use_latest_user_image": {
-                        "type": "boolean",
-                        "default": False,
-                        "description": "可选：使用“用户最新上传图”作为参考图（需要启用“用户最新上传图导入”能力）",
-                    },
-                    "local_file": {
-                        "type": "string",
-                        "pattern": "^(file://|[A-Za-z]:\\\\\\\\|/).+",
-                        "description": "可选：本地图片路径或 file:/// URI（禁止 http(s) URL；需要启用“用户最新上传图导入”能力）",
-                    },
-                    "history_id": {
-                        "type": "integer",
-                        "description": "可选：稳定历史序号（在 history 列表中显示）；不会随列表变化",
-                    },
-                },
+                "properties": generate_properties,
                 "required": ["model", "prompt"],
             },
         ),
