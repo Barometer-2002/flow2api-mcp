@@ -1,8 +1,8 @@
 # Flow2API MCP Server
 
-一个基于 stdio 的 MCP 服务：将 Flow2API / OpenAI-compatible 上游封装为 MCP 工具（`generate` / `history` / `cache`）。
+一个基于 stdio 的 MCP 服务：将 [Flow2API](https://github.com/TheSmallHanCat/flow2api) / OpenAI-compatible 上游封装为 MCP 工具（`generate` / `history` / `cache`）。
 
-> 说明：这是个人项目，**不保证兼容性与长期维护**。若你对稳定性要求更高，建议优先使用上游原生调用方式。目前只在**本地**搭配 **Cherry Studio** 客户端使用。
+> 说明：这是个人项目，**不保证兼容性与长期维护**。若你对稳定性要求更高，建议优先使用上游原生调用方式。目前只在**windows**搭配 **Cherry Studio** 客户端使用。
 
 工具：
 - `generate`：文生图 / 文生视频；也支持用历史图片继续生成

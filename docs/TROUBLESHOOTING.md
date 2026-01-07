@@ -5,6 +5,8 @@
 - `API错误 401`：检查 `FLOW2API_API_KEY`
 - `API错误 403`：通常是上游/权限/配额问题
 - `❌ 生成失败：无结果 / empty content extracted`：表示上游 `HTTP 200` 但 MCP 未能从响应中提取到可用内容（文本或图片/视频链接）
+- `cherry studio 无法渲染出图片`：未开启 MCP“长时间运行模式”
+- `无法cherry studio 上传的图参考`：未设置 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR`，或路径错误
 
 ## `empty content extracted` 如何排查
 
