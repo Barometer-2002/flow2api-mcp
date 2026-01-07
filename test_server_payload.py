@@ -606,6 +606,29 @@ class TestGeneratePayload(unittest.TestCase):
             )
             self.assertTrue(result)
 
+    def test_reference_source_must_be_single_choice(self) -> None:
+        image_model = "gemini-2.5-flash-image-landscape"
+
+        with (
+            patch.object(server, "USER_IMAGE_DIR", server.Path("C:/allowed")),
+            patch.object(server.history_manager, "get_by_id", return_value={"urls": ["http://example.com/a.jpg"]}),
+            patch.object(server, "download_url_as_base64", new=AsyncMock(return_value="data:image/jpeg;base64,Zm9v")),
+            patch.object(server.http_client, "get_client", new=AsyncMock(return_value=None)),
+            patch.object(server, "_flow2api_stream_chat_completions", new=AsyncMock(return_value=(200, "", "ok", ""))),
+        ):
+            result = asyncio.run(
+                server.handle_generate(
+                    {
+                        "model": image_model,
+                        "prompt": "x",
+                        "history_id": 1,
+                        "local_file": "file:///C:/allowed/a.png",
+                    }
+                )
+            )
+            self.assertTrue(result)
+            self.assertIn("三选一", result[0].text)
+
     def test_generate_wraps_video_url_as_markdown_link(self) -> None:
         video_url = "http://example.com/a.mp4"
         video_model = "veo_3_1_t2v_fast_landscape"

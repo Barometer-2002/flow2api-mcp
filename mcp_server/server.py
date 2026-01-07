@@ -1486,15 +1486,14 @@ def _generate_desc() -> str:
     base = """生成图片或视频。
 
 输出要求：
-- 必须真实调用工具；禁止编造“正在生成/已完成/结果链接”等内容。
 - 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里。
 
-参考图参数（需要参考图时三选一；可同时带 history_id +（use_latest_user_image/local_file）实现双参考）：
+参考图参数（三选一）：
 - history_id：使用历史记录中的图片作为参考图（配合 history 工具获取/搜索）
 """
 
     if USER_IMAGE_DIR is None:
-        reference_policy = """注意：未启用“用户最新上传图”导入能力时，只能使用 history_id 作为参考图；当前对话里的图片附件无法作为参考图传给上游。"""
+        reference_policy = """当前仅支持 history_id 作为参考图来源。"""
         tail = """
 参数：
 - model（必填）
@@ -1504,7 +1503,7 @@ def _generate_desc() -> str:
         return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
 
     reference_policy = """- use_latest_user_image=true：使用“用户最新上传图”作为参考图
-- local_file=...：使用本地图片路径或 file:/// 作为参考图（禁止 http(s)）"""
+- local_file=...：使用本地图片路径或 file:/// 作为参考图"""
 
     tail = """
 参数：
@@ -1524,8 +1523,7 @@ def _generate_latest_upload_desc() -> str:
 
 参数：
 - model（必填）
-- prompt（必填）
-- history_id（可选；与最新上传图一起作为双参考）"""
+- prompt（必填）"""
         "\n\n"
         + _model_selection_guide()
     )
@@ -1544,7 +1542,7 @@ HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
 CACHE_DESC = """缓存/历史清理工具。
 
-安全确认：include_history=true 且 action=clear/prune 时，必须传 confirm=true。
+清理历史记录：include_history=true 且 confirm=true。
 
 参数：
 - action: status / clear / prune（默认 status）
@@ -1618,10 +1616,6 @@ def get_tools() -> list[Tool]:
                         "prompt": {
                             "type": "string",
                             "description": "生成描述。写得越详细越好，包括：主体、场景、风格、光线、颜色、构图等。",
-                        },
-                        "history_id": {
-                            "type": "integer",
-                            "description": "可选：稳定历史序号（用于与“用户最新上传图”一起作为参考图）",
                         },
                     },
                     "required": ["model", "prompt"],
@@ -1705,8 +1699,21 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
 
     model = str(args.get("model") or "").strip() or DEFAULT_MODEL
 
-    if args.get("use_latest_user_image") and args.get("local_file"):
-        return [TextContent(type="text", text="错误: use_latest_user_image 与 local_file 只能二选一")]
+    ref_sources = 0
+    if args.get("history_id") is not None:
+        ref_sources += 1
+    if args.get("use_latest_user_image"):
+        ref_sources += 1
+    if args.get("local_file"):
+        ref_sources += 1
+
+    if ref_sources > 1:
+        return [
+            TextContent(
+                type="text",
+                text="错误: 参考图来源只能三选一（history_id / use_latest_user_image / local_file），不允许同时提供多个。",
+            )
+        ]
 
     if args.get("use_latest_user_image"):
         try:
