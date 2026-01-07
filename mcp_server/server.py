@@ -1485,55 +1485,32 @@ DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX = (
 def _generate_desc() -> str:
     base = """生成图片或视频。
 
-输出要求（必须遵守）：
+输出要求：
 - 必须真实调用工具；禁止编造“正在生成/已完成/结果链接”等内容。
-- 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里（不要只留在工具返回区）。
+- 调用后：把工具返回的图片/视频链接原样粘贴到最终回复正文里。
 
-参考图（图生图/图生视频等）：
-- 只要用户需要“基于某张图继续”，就必须显式提供可用参考图来源；不要仅凭文字臆测参考图。
-- 若用户提供了明确来源（history_id / local_file / use_latest_user_image），优先按用户明确来源执行。
-- 若用户“上传了新图”但语义是“改上一张/改历史图”：仍应以 history_id 为主；新图只有在语义指向“用新图改/融合”时才作为参考。
-- 仅在你无法判断时：问 1 句澄清；只有需要用户选 history_id 时才调用 history。
-
-提示词（建议写法）：
-- 单段落写清：主体、场景、构图/镜头、光线、风格、细节（可选：负面约束）。
-- 信息不足先问 1-3 个澄清问题。
+参考图参数（需要参考图时三选一；可同时带 history_id +（use_latest_user_image/local_file）实现双参考）：
+- history_id：使用历史记录中的图片作为参考图（配合 history 工具获取/搜索）
 """
 
     if USER_IMAGE_DIR is None:
-        reference_policy = """参考图能力：未启用“用户最新上传图”导入。
-
-可用来源：
-- history_id（来自 history）
-
-使用要求：
-- 当前对话即使出现图片附件，你也无法把附件作为参考图传给上游；不要声称“将用附件作为参考图”。
-"""
+        reference_policy = """注意：未启用“用户最新上传图”导入能力时，只能使用 history_id 作为参考图；当前对话里的图片附件无法作为参考图传给上游。"""
         tail = """
 参数：
 - model（必填）
 - prompt（必填）
-- history_id（可选；参考图来源；不填表示纯文本生成）
+- history_id（可选；不填表示纯文本生成）
 """
         return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
 
-    reference_policy = """参考图能力：已启用“用户最新上传图”导入。
-
-可用来源（按语义选择，并非固定优先级）：
-- use_latest_user_image=true：使用“用户最新上传图”作为参考图
-- local_file=...：本地路径或 file:///（必须在允许目录内）
-- history_id=...：历史记录中的图片
-
-约束：
-- 禁止把 http(s) 链接塞进 local_file（local_file 只接受本地路径/file URI）。
-- 文字里的图片 URL 属于“外链文本引用”，不是“可用参考图”；应提示用户上传图片或改用 history_id。
-"""
+    reference_policy = """- use_latest_user_image=true：使用“用户最新上传图”作为参考图
+- local_file=...：使用本地图片路径或 file:/// 作为参考图（禁止 http(s)）"""
 
     tail = """
 参数：
 - model（必填）
 - prompt（必填）
-- history_id / use_latest_user_image / local_file（可选；参考图来源；不填表示纯文本生成）
+- history_id / use_latest_user_image / local_file（可选；不填表示纯文本生成）
 """
 
     return base + "\n" + reference_policy + "\n" + tail + "\n\n" + _model_selection_guide()
@@ -1541,21 +1518,14 @@ def _generate_desc() -> str:
 
 def _generate_latest_upload_desc() -> str:
     return (
-        """生成图片或视频（强制使用“用户最新上传图”作为参考图）。
+        """生成图片或视频（参考图固定为“用户最新上传图”）。
 
-何时使用：
-- 你已经明确判断：用户要基于“刚上传的新图”继续生成/修改。
-
-输出要求：
-- 调用后把工具返回的图片/视频链接原样粘贴到最终回复正文里。
-
-可选：
-- 若用户明确要“在历史某张图上融合新图”：可同时传 history_id（= 双参考）。
+输出要求：调用后把工具返回的图片/视频链接原样粘贴到最终回复正文里。
 
 参数：
 - model（必填）
 - prompt（必填）
-- history_id（可选）"""
+- history_id（可选；与最新上传图一起作为双参考）"""
         "\n\n"
         + _model_selection_guide()
     )
@@ -1563,15 +1533,10 @@ def _generate_latest_upload_desc() -> str:
 
 HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
-用法：
-- 用户明确要求“查看历史”：输出完整列表。
-- 你只是为了给 generate 找参考图：默认不要贴全列表，只贴你最终选中的那条（history_id + 参考图/链接）；找不到/不唯一才贴候选让用户确认。
-
-输出要求：
-- 禁止假调用：未实际调用工具时不得编造历史列表。
+用途：给 generate 提供 history_id。
 
 参数：
-- history_id: 指定则只返回该条（用于“查某一条历史信息”）
+- history_id: 指定则只返回该条
 - query / keyword: 关键词搜索（不唯一返回候选摘要；唯一返回单条）
 - limit: 返回条数（默认 5）
 - scope: recent / archive（默认 recent）"""
@@ -1579,11 +1544,7 @@ HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
 CACHE_DESC = """缓存/历史清理工具。
 
-输出要求：
-- 禁止假调用：未实际调用工具时不得编造“已清理/已裁剪/状态”。
-
-安全确认：
-- 当 include_history=true 且 action=clear/prune 时，必须传 confirm=true（防误删）。
+安全确认：include_history=true 且 action=clear/prune 时，必须传 confirm=true。
 
 参数：
 - action: status / clear / prune（默认 status）
