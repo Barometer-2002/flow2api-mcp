@@ -635,32 +635,35 @@ async def _flow2api_stream_chat_completions(
 
     err_text = ""
     if not content_text.strip():
-        # Make empty 200s actionable: provide parsing diagnostics (without leaking full payloads).
+        # Empty 200: keep user-facing error short; dump raw SSE for debugging.
+        if raw_lines:
+            try:
+                debug_path = Path(__file__).resolve().parent / "upstream_debug_last.txt"
+                debug_path.write_text("\n".join(raw_lines), encoding="utf-8", errors="ignore")
+            except Exception:
+                pass
+
         counts = ", ".join(f"{k}={v}" for k, v in debug.items() if v)
         sample = "; ".join(debug_sample) if debug_sample else ""
         payload_prefix = ""
         if first_json_payload:
             s = first_json_payload
-            # Avoid leaking large base64 blobs in error text.
             s = re.sub(r"(data:image/[a-zA-Z0-9.+-]+;base64,)[A-Za-z0-9+/=]+", r"\\1<base64>", s)
             s = re.sub(r"(\"b64_json\"\\s*:\\s*\")([^\"]+)(\")", r"\\1<base64>\\3", s)
             s = re.sub(r"(\"url\"\\s*:\\s*\")([^\"]{120,})(\")", r"\\1<omitted>\\3", s)
             payload_prefix = s[:400].replace("\n", " ")
-        parts = ["empty content extracted"]
+
+        detail_parts = []
         if counts:
-            parts.append(counts)
+            detail_parts.append(counts)
         if sample:
-            parts.append(sample)
+            detail_parts.append(sample)
         if payload_prefix:
-            parts.append(f"payload_prefix={payload_prefix}")
-        if raw_lines:
-            try:
-                debug_path = Path(__file__).resolve().parent / "upstream_debug_last.txt"
-                debug_path.write_text("\n".join(raw_lines), encoding="utf-8", errors="ignore")
-                parts.append(f"debug_dump={debug_path}")
-            except Exception:
-                pass
-        err_text = ("; ".join(parts))[:2000]
+            detail_parts.append(f"payload_prefix={payload_prefix}")
+        if detail_parts:
+            _debug("empty content extracted; " + " | ".join(detail_parts))
+
+        err_text = "empty content extracted"
 
     return 200, reasoning_text, content_text, err_text
 
@@ -1858,7 +1861,10 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         await asyncio.sleep(2)
 
     if status != 200:
-        error_summary = (err_text.strip() or reasoning_text.strip() or first_error_summary or "无结果")[:500]
+        summary_source = (err_text.strip() or first_error_summary or "无结果").strip()
+        if summary_source.startswith("empty content extracted"):
+            summary_source = "上游返回 200 但未返回可用结果字段（仅有进度/日志）。"
+        error_summary = summary_source[:500]
         error_msg = (
             f"❌ 生成失败：{error_summary}\n\n"
             "排查建议：\n"
@@ -1870,8 +1876,14 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=error_msg)]
 
     if not content_text.strip():
-        error_summary = (err_text.strip() or reasoning_text.strip() or first_error_summary or "无结果")[:500]
-        error_msg = f"❌ 生成失败：{error_summary}"
+        summary_source = (err_text.strip() or first_error_summary or "无结果").strip()
+        if summary_source.startswith("empty content extracted"):
+            summary_source = "上游返回 200 但未返回可用结果字段（仅有进度/日志）。"
+        error_summary = summary_source[:500]
+        error_msg = (
+            f"❌ 生成失败：{error_summary}\n\n"
+            "提示：已保存上游原始返回到 `mcp_server/upstream_debug_last.txt`，可用于排查。"
+        )
         history_manager.add_failure(used_model, prompt, error_summary)
         return [TextContent(type="text", text=error_msg)]
 

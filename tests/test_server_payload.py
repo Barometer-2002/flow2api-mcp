@@ -272,8 +272,7 @@ class TestGeneratePayload(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(reasoning, "")
         self.assertEqual(content, "")
-        self.assertIn("empty content extracted", err)
-        self.assertIn("choice0_keys=", err)
+        self.assertEqual(err, "empty content extracted")
 
     def test_openai_stream_parses_delta_images_single_object(self) -> None:
         class FakeResponse:
@@ -348,7 +347,7 @@ class TestGeneratePayload(unittest.TestCase):
                 )
             )
             self.assertEqual(len(result), 1)
-            self.assertIn("empty content extracted", result[0].text)
+            self.assertIn("未返回可用结果字段", result[0].text)
 
     def test_history_local_cache_url_marked_as_cached(self) -> None:
         local = "http://127.0.0.1:46262/mcp-cache/x.jpg"
