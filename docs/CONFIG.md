@@ -13,7 +13,7 @@
 | `FLOW2API_MCP_CACHE_HTTP_PORT` | `46262` | 本机缓存 HTTP 端口（端口被占用会回退随机端口；设为 `0` 强制随机） |
 | `FLOW2API_MCP_URL_CACHE_MAX_FILE_BYTES` | `100` | 单文件缓存上限（单位 MB） |
 | `FLOW2API_MCP_URL_CACHE_MAX_ENTRIES` | `200` | URL 缓存最大条目数（超出会按时间淘汰） |
-| `FLOW2API_MCP_GENERATE_RETRY_COUNT` | `3` | `generate` 失败自动重试次数（同一模型，每次间隔 2 秒；最大 10；解析为空时不会重试） |
+| `FLOW2API_MCP_GENERATE_RETRY_COUNT` | `0` | `generate` 失败自动重试次数（同一模型，每次间隔 2 秒；最大 10；解析为空时不会重试） |
 | `FLOW2API_MCP_HISTORY_RECENT_SIZE` | `50` | 短期历史 `mcp_server/history.json` 最大条数 |
 | `FLOW2API_MCP_HISTORY_ARCHIVE_SIZE` | `2000` | 长期历史 `mcp_server/history_archive.json` 最大条数 |
 
@@ -47,4 +47,3 @@
 - `selection_guide_lines`：选型指南（按行写，程序会自动用换行拼接）
 
 修改 `mcp_server/models.json` 后需重启 MCP 生效。
-
