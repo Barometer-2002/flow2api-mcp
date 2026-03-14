@@ -1,32 +1,38 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-.Python
-env/
+
+# Virtual environment
 venv/
-ENV/
 .venv/
-build/
-dist/
-*.egg-info/
+env/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
-.DS_Store
-.stfolder/
 
-# MCP runtime artifacts
+# OS
+.DS_Store
+Thumbs.db
+
+# MCP runtime data (DO NOT commit)
 mcp_server/history.json
 mcp_server/history_archive.json
-mcp_server/url_cache.json
 mcp_server/url_cache/
+mcp_server/url_cache.json
 mcp_server/upstream_debug_last.txt
-scripts/upstream_inspect_*.txt
 
-# Local backups
-mcp_server/models.json.bak
+# Docker
+docker-compose.override.yml
+
+# Data volumes
+data/
+
+# Distribution
+dist/
+build/
+*.egg-info/

@@ -1,3 +1,3 @@
-"""Flow2API MCP Server - MCP service for Flow2API"""
+"""Flow2API MCP Server — MCP service for Flow2API image generation."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

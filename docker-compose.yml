@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  flow2api-mcp:
+    build: .
+    container_name: flow2api-mcp-http
+    ports:
+      - "8866:8000"       # MCP HTTP SSE 端口
+      - "46262:46262"     # 媒体缓存 HTTP 端口（可选，用于外部访问缓存文件）
+    environment:
+      # === 必填 ===
+      - FLOW2API_BASE_URL=http://host.docker.internal:8000  # 或你的 Flow2API 地址
+      - FLOW2API_API_KEY=your-api-key-here
+
+      # === 推荐 ===
+      - FLOW2API_MCP_URL_CACHE=1                    # 开启本地媒体缓存
+      - FLOW2API_MCP_HOST=0.0.0.0                   # Docker 内需要监听所有地址
+      # - FLOW2API_MCP_EXTERNAL_URL_PREFIX=http://your-server-ip:46262  # Docker/远程部署时设置
+
+      # === 可选 ===
+      # - FLOW2API_MCP_CACHE_HTTP_PORT=46262
+      # - FLOW2API_MCP_URL_CACHE_MAX_ENTRIES=200
+      # - FLOW2API_MCP_HISTORY_RECENT_SIZE=50
+      # - FLOW2API_MCP_HISTORY_ARCHIVE_SIZE=2000
+      # - FLOW2API_MCP_GENERATE_RETRY_COUNT=0
+      # - FLOW2API_MCP_DEBUG=0
+    volumes:
+      - ./data/url_cache:/app/mcp_server/url_cache              # 持久化媒体缓存
+      - ./data/history.json:/app/mcp_server/history.json        # 持久化历史记录
+      - ./data/history_archive.json:/app/mcp_server/history_archive.json
+    restart: unless-stopped

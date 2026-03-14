@@ -1,49 +1,65 @@
-# 配置指南
+# ⚙️ V2 详细配置指南
 
-本页涵盖：环境变量、缓存、Cherry Studio 上传目录、模型列表文件。
+Flow2API MCP HTTP (V2) 通过环境变量来控制其运行时的所有行为。以下是所有可用配置的详尽列表。
 
-## 环境变量
+---
 
-| 变量名 | 默认值 | 作用 |
-| --- | --- | --- |
-| `FLOW2API_BASE_URL` | `http://localhost:8000` | Flow2API 服务地址 |
-| `FLOW2API_API_KEY` | 空 | Flow2API API Key |
-| `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR` | 空 | Cherry Studio 用户上传目录；不设置则关闭用户上传图导入 |
-| `FLOW2API_MCP_URL_CACHE` | `0` | 是否启用本机媒体缓存（写入 `mcp_server/url_cache/` 与 `mcp_server/url_cache.json`） |
-| `FLOW2API_MCP_CACHE_HTTP_PORT` | `46262` | 本机缓存 HTTP 端口（端口被占用会回退随机端口；设为 `0` 强制随机） |
-| `FLOW2API_MCP_URL_CACHE_MAX_FILE_BYTES` | `100` | 单文件缓存上限（单位 MB） |
-| `FLOW2API_MCP_URL_CACHE_MAX_ENTRIES` | `200` | URL 缓存最大条目数（超出会按时间淘汰） |
-| `FLOW2API_MCP_GENERATE_RETRY_COUNT` | `0` | `generate` 失败自动重试次数（同一模型，每次间隔 2 秒；最大 10；解析为空时不会重试） |
-| `FLOW2API_MCP_HISTORY_RECENT_SIZE` | `50` | 短期历史 `mcp_server/history.json` 最大条数 |
-| `FLOW2API_MCP_HISTORY_ARCHIVE_SIZE` | `2000` | 长期历史 `mcp_server/history_archive.json` 最大条数 |
+## 核心通讯配置
 
-说明：
-- 所有开关类环境变量：`0` 关闭，其他值开启。
+| 变量名 | 必填 | 默认值 | 作用说明 |
+|--------|:---:|--------|----------|
+| `FLOW2API_BASE_URL` | ✅ | `http://localhost:8000` | Flow2API 服务的基础 URL。请注意：URL 末尾原则上不需要加 `/v1`，MCP 会自动补全 `/v1/chat/completions` 和 `/v1/models` 等路径。 |
+| `FLOW2API_API_KEY` | ✅ | 空 | 访问 Flow2API 服务的凭据。建议至少配置以防止未经授权的访问（代码内部无需加 `Bearer ` 前缀）。 |
 
-## 本机媒体缓存（推荐）
+---
 
-开启：
-- `FLOW2API_MCP_URL_CACHE=1`
+## 本地缓存 HTTP 服务
 
-常用可调项：
-- `FLOW2API_MCP_CACHE_HTTP_PORT=46262`（端口被占用会自动回退随机端口；设为 `0` 强制随机）
-- `FLOW2API_MCP_URL_CACHE_MAX_FILE_BYTES=100`（单位 MB；例如 `100`=100MB）
-- `FLOW2API_MCP_URL_CACHE_MAX_ENTRIES=200`
+当需要复用生成的图片，或想在宿主机/容器外通过 URL 访问图片时使用。
 
-## Cherry Studio 用户上传图参考（推荐）
+| 变量名 | 必填 | 默认值 | 作用说明 |
+|--------|:---:|--------|----------|
+| `FLOW2API_MCP_URL_CACHE` | | `0` | 是否开启缓存服务的主开关，`1` = 开启，其它 = 关闭。开启后，程序会自动将生成的外部临时图片链接下载到本地磁盘并提供稳定 HTTP 访问。 |
+| `FLOW2API_MCP_CACHE_HTTP_PORT` | | `46262` | 内置 HTTP 服务器的监听端口。如果端口被占用，服务会自动尝试随机空闲端口。 |
+| `FLOW2API_MCP_HOST` | | `127.0.0.1` | HTTP 服务的绑定地址。如果需要在 Docker 容器外或其它局域网设备上访问，请务必设置为 `0.0.0.0`。 |
+| `FLOW2API_MCP_EXTERNAL_URL_PREFIX` | | 空 | 覆盖 HTTP 服务对外暴露的基址。例如部署在云端并使用反向代理指向该服务时，可设置为 `https://your-domain.com:46262`，此时返回给模型上下文的缓存链接会以此为前缀。 |
 
-由于 MCP 无法直接获取对话中的“附件图片”，本项目通过读取 Cherry Studio 的本地上传目录，实现用户参考图的“上传→复用”。
+### 存储容量控制
 
-启用：
-- 设置 `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR` 为上传目录（示例：`C:\\Users\\<YOU>\\AppData\\Roaming\\CherryStudio\\Data\\Files`）
+| 变量名 | 必填 | 默认值 | 作用说明 |
+|--------|:---:|--------|----------|
+| `FLOW2API_MCP_URL_CACHE_MAX_ENTRIES` | | `200` | 最多保留的缓存图片数量。当超过这个数值时，服务会按照 LRU（最近最少使用/修改时间）策略，自动剔除最旧的缓存文件。 |
+| `FLOW2API_MCP_URL_CACHE_MAX_FILE_BYTES` | | `100` | 单个允许缓存的最大文件大小，单位为 MB。超过此大小的媒体文件会被放弃下载跳过缓存。 |
 
-支持格式：`png/jpg/jpeg/webp/gif/bmp/tif/tiff`
+---
 
-## 模型列表与选型指南（`mcp_server/models.json`）
+## 图片来源导入（用户参考图）
 
-默认从 `mcp_server/models.json` 读取配置：
-- `models`：可用模型列表（也用于 `generate.model` 的枚举校验）
-- `default_model`：默认模型（如果不在 `models` 里会回退到 `models[0]`）
-- `selection_guide_lines`：选型指南（按行写，程序会自动用换行拼接）
+允许 Agent 将获取到的外部图片传递给 MCP 以用于重绘/图像编辑参考。
 
-修改 `mcp_server/models.json` 后需重启 MCP 生效。
+| 变量名 | 必填 | 默认值 | 作用说明 |
+|--------|:---:|--------|----------|
+| `FLOW2API_MCP_IMAGE_DIR` | | 空 | 通用的本地监控目录路径。MCP 服务会监控此目录，且每次被要求“基于一张本地的图片修改”时，会读取目录下修改时间最新的一张图片作为参考。 |
+| `FLOW2API_MCP_CHERRYSTUDIO_FILES_DIR` | | 空 | 兼容旧版的别名。等同于 `FLOW2API_MCP_IMAGE_DIR`。如果是 Cherry Studio 客户端，它通常会将你对话框中的附件存入类似 `%APPDATA%\CherryStudio\Data\Files`。 |
+
+> 注：V2 还支持了直接传入 `image_url` 作为一个公网地址作为参考，此功能无需配置环境变量。
+
+---
+
+## 跨会话生成历史
+
+使用生成历史图复用（`history_id`）功能时相关的容量限制。它存储在持久化的 Json 文件中。
+
+| 变量名 | 必填 | 默认值 | 作用说明 |
+|--------|:---:|--------|----------|
+| `FLOW2API_MCP_HISTORY_RECENT_SIZE` | | `50` | 在内存和展示记录中最多保留的条目数量（调用 `scope="recent"` 时）。 |
+| `FLOW2API_MCP_HISTORY_ARCHIVE_SIZE` | | `2000` | 归档到历史持久化文档中的最大容量。这保障了你可以用几个月前的一个旧 `history_id` 来继续作图。 |
+
+---
+
+## 其他调优与调试
+
+| 变量名 | 必填 | 默认值 | 作用说明 |
+|--------|:---:|--------|----------|
+| `FLOW2API_MCP_GENERATE_RETRY_COUNT` | | `0` | 调用大模型生成时的最大自动重试次数。如设为 `2`，当因网络阻塞生成失败时会自动重启请求 2 次。 |
+| `FLOW2API_MCP_DEBUG` | | `0` | 设为 `1` 可在标准错误流 (stderr) 输出大量跟踪日志，建议在查问题时按需开启，日常关闭以防刷屏。 |
