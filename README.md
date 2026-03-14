@@ -105,7 +105,7 @@ supergateway --port 8000 --stdio "python -m mcp_server"
 > **参考图来源三选一**：`history_id`、`use_latest_user_image` 与 `image_url` 互斥，不传则为纯文本生成。
 
 **示例：**
-```jsonc
+```json
 // 文生图
 { "model": "gemini-3.1-flash-image-landscape", "prompt": "一只可爱的猫咪在花园里玩耍" }
 

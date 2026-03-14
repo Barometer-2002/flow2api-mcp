@@ -18,7 +18,7 @@
 * **`image_url`**：填入一个外部带有 http/https 的公网图片链接。MCP 会自动下载它并作为参考图传给上游。适合运行在云端的 Agent 或自动流使用。
 
 ### 用法示例：
-```jsonc
+```json
 // 纯文生图
 { "model": "gemini-3.1-flash-image-landscape", "prompt": "一只可爱的猫咪在赛博太空站" }
 
@@ -60,7 +60,7 @@
 * **`confirm`**：双重确认安全锁。凡是涉及到删除数据的动作，都必须传递 `confirm=true`，否则 MCP 会予以拒绝拦截。
 
 ### 示例用法：
-```jsonc
+```json
 // 查看当前占据了磁盘多大，还有多少张图片
 { "action": "status" }
 
