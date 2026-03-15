@@ -49,7 +49,7 @@ python -m mcp_server
 pip install -r requirements.txt
 npm install -g supergateway
 
-supergateway --port 8000 --stdio "python -m mcp_server"
+supergateway --port 8000 --outputTransport streamableHttp --stdio "python -m mcp_server"
 ```
 
 ---

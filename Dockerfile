@@ -18,4 +18,4 @@ RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages
 
 EXPOSE 8000
 
-CMD ["supergateway", "--port", "8000", "--stdio", "python3 -m mcp_server"]
+CMD ["supergateway", "--port", "8000", "--outputTransport", "streamableHttp", "--stdio", "python3 -m mcp_server"]
