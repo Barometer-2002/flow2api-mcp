@@ -5,8 +5,8 @@ services:
     build: .
     container_name: flow2api-mcp-http
     ports:
-      - "8866:8000"       # MCP HTTP SSE 端口
-      - "46262:46262"     # 媒体缓存 HTTP 端口（可选，用于外部访问缓存文件）
+      - "8866:8000"       # MCP Streamable HTTP 端口
+      - "46262:46262"     # 图片缓存 HTTP 端口（可选，用于外部访问缓存文件）
     environment:
       # === 必填 ===
       - FLOW2API_BASE_URL=http://host.docker.internal:8000  # 或你的 Flow2API 地址
@@ -16,6 +16,7 @@ services:
       - FLOW2API_MCP_URL_CACHE=1                    # 开启本地媒体缓存
       - FLOW2API_MCP_HOST=0.0.0.0                   # Docker 内需要监听所有地址
       # - FLOW2API_MCP_EXTERNAL_URL_PREFIX=http://your-server-ip:46262  # Docker/远程部署时设置
+      # - FLOW2API_MCP_IMAGE_DIR=/app/user-images   # 需要读取宿主机本地图片时设置
 
       # === 可选 ===
       # - FLOW2API_MCP_CACHE_HTTP_PORT=46262
@@ -28,4 +29,5 @@ services:
       - ./data/url_cache:/app/mcp_server/url_cache              # 持久化媒体缓存
       - ./data/history.json:/app/mcp_server/history.json        # 持久化历史记录
       - ./data/history_archive.json:/app/mcp_server/history_archive.json
+      # - /path/to/local/images:/app/user-images:ro             # 宿主机图片目录（可选）
     restart: unless-stopped
