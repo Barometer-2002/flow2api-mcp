@@ -1,66 +1,9 @@
-"""Flow2API MCP Server — Entry point for ``python -m mcp_server``."""
+"""Module entrypoint for ``python -m mcp_server``."""
 
-import json
-import os
-import sys
-import urllib.request
-from pathlib import Path
+from __future__ import annotations
 
+from .cli import main
 
-def _sync_models() -> None:
-    """启动时自动从上游同步图片模型列表到 models.json。"""
-    base_url = os.environ.get("FLOW2API_BASE_URL", "http://localhost:8000").rstrip("/")
-    api_key = os.environ.get("FLOW2API_API_KEY", "")
-    models_path = Path(__file__).parent / "models.json"
-
-    try:
-        req = urllib.request.Request(
-            f"{base_url}/v1/models",
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-
-        all_models = [m["id"] for m in data.get("data", [])]
-        # 只保留图片生成模型
-        image_models = [m for m in all_models if "image" in m or "imagen" in m]
-
-        if not image_models:
-            print("[MCP] 模型同步: 未找到图片模型，跳过", file=sys.stderr)
-            return
-
-        if models_path.exists():
-            with open(models_path, encoding="utf-8") as f:
-                mcp_data = json.load(f)
-        else:
-            mcp_data = {}
-
-        old_models = mcp_data.get("models", [])
-        mcp_data["models"] = image_models
-
-        # 默认模型不在新列表里则重置
-        if mcp_data.get("default_model") not in image_models:
-            mcp_data["default_model"] = image_models[0]
-
-        with open(models_path, "w", encoding="utf-8") as f:
-            json.dump(mcp_data, f, indent=2, ensure_ascii=False)
-
-        added = set(image_models) - set(old_models)
-        removed = set(old_models) - set(image_models)
-        parts = [f"{len(image_models)} 个"]
-        if added:
-            parts.append(f"新增 {len(added)}")
-        if removed:
-            parts.append(f"移除 {len(removed)}")
-        print(f"[MCP] 图片模型同步完成: {', '.join(parts)}", file=sys.stderr)
-
-    except Exception as e:
-        print(f"[MCP] 模型同步失败（不影响启动）: {e}", file=sys.stderr)
-
-
-_sync_models()
-
-from .server import run  # noqa: E402
 
 if __name__ == "__main__":
-    run()
+    raise SystemExit(main())

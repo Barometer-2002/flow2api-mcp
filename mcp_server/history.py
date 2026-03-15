@@ -6,6 +6,7 @@ import json
 import sys
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from .config import (
@@ -64,28 +65,28 @@ class HistoryManager:
 
     # ---- persistence ----
 
+    def _load_history_list(self, path: Path, label: str) -> list[dict[str, Any]]:
+        try:
+            raw = path.read_text(encoding="utf-8")
+            if not raw.strip():
+                return []
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return data
+        except Exception as exc:
+            print(f"[MCP] {label}: {exc}", file=sys.stderr)
+        return []
+
     def _load_history(self) -> None:
         if HISTORY_FILE.exists():
-            try:
-                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, list):
-                    self._recent = deque(data, maxlen=MAX_HISTORY_RECENT_SIZE)
-                debug(f"history loaded: recent={len(self._recent)}")
-            except Exception as exc:
-                print(f"[MCP] 加载历史记录失败: {exc}", file=sys.stderr)
-                self._recent = deque(maxlen=MAX_HISTORY_RECENT_SIZE)
+            data = self._load_history_list(HISTORY_FILE, "加载历史记录失败")
+            self._recent = deque(data, maxlen=MAX_HISTORY_RECENT_SIZE)
+            debug(f"history loaded: recent={len(self._recent)}")
 
         if HISTORY_ARCHIVE_FILE.exists():
-            try:
-                with open(HISTORY_ARCHIVE_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, list):
-                    self._archive = deque(data, maxlen=MAX_HISTORY_ARCHIVE_SIZE)
-                debug(f"history loaded: archive={len(self._archive)}")
-            except Exception as exc:
-                print(f"[MCP] 加载历史归档失败: {exc}", file=sys.stderr)
-                self._archive = deque(maxlen=MAX_HISTORY_ARCHIVE_SIZE)
+            data = self._load_history_list(HISTORY_ARCHIVE_FILE, "加载历史归档失败")
+            self._archive = deque(data, maxlen=MAX_HISTORY_ARCHIVE_SIZE)
+            debug(f"history loaded: archive={len(self._archive)}")
         else:
             if self._recent:
                 self._archive = deque(list(self._recent), maxlen=MAX_HISTORY_ARCHIVE_SIZE)

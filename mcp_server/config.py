@@ -7,6 +7,10 @@ import os
 import sys
 from pathlib import Path
 
+from .env_loader import load_project_env
+
+load_project_env()
+
 PROJECT_ROOT = Path(__file__).parent
 HISTORY_FILE = PROJECT_ROOT / "history.json"
 HISTORY_ARCHIVE_FILE = PROJECT_ROOT / "history_archive.json"
@@ -34,8 +38,17 @@ USER_IMAGE_DIR: Path | None = (
 MAX_HISTORY_RECENT_SIZE = int(os.environ.get("FLOW2API_MCP_HISTORY_RECENT_SIZE", "50"))
 MAX_HISTORY_ARCHIVE_SIZE = int(os.environ.get("FLOW2API_MCP_HISTORY_ARCHIVE_SIZE", "2000"))
 
-CACHE_HTTP_PORT = int(os.environ.get("FLOW2API_MCP_CACHE_HTTP_PORT", "46262"))
 GENERATE_RETRY_COUNT = int(os.environ.get("FLOW2API_MCP_GENERATE_RETRY_COUNT", "0"))
+
+DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX = (
+    "\n\n"
+    "【默认规则】画面/字幕/标牌/海报/界面等任何可见文字默认使用简体中文；"
+    "除非我在提示词里明确指定其他语言或多语言。"
+)
+IMAGE_PROMPT_SUFFIX = os.environ.get(
+    "FLOW2API_MCP_PROMPT_SUFFIX",
+    DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX,
+)
 
 HTTP_TIMEOUT = 600.0
 HTTP_CONNECT_TIMEOUT = 30.0

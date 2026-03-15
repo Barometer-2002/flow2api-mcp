@@ -1,23 +1,18 @@
-"""URL cache, local media storage, and built-in cache HTTP server."""
+"""URL cache, local media storage, and cache URL helpers."""
 
 from __future__ import annotations
 
 import asyncio
 import base64
 import hashlib
-import http.server
 import json
-import mimetypes
 import os
-import re
 import sys
-import threading
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from .config import (
-    CACHE_HTTP_PORT,
     URL_CACHE_DIR,
     URL_CACHE_ENABLED,
     URL_CACHE_INDEX_FILE,
@@ -379,10 +374,9 @@ async def import_local_file(value: str) -> tuple[Optional[str], Optional[str]]:
         raise ValueError("保存本地文件失败")
 
     base = ensure_cache_http_server()
-    if base:
-        local_url = f"{base}/mcp-cache/{filename}"
-    else:
-        local_url = f"http://127.0.0.1:{CACHE_HTTP_PORT}/mcp-cache/{filename}"
+    if not base:
+        raise ValueError("未能解析缓存图片的访问地址")
+    local_url = f"{base}/mcp-cache/{filename}"
 
     data = base64.b64encode(raw).decode()
     data_uri = f"data:{mime};base64,{data}"
@@ -419,88 +413,35 @@ def pick_user_image_paths(count: int = 1) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# Cache HTTP server
+# Cache HTTP URL helpers
 # ---------------------------------------------------------------------------
 
-_cache_httpd: Optional[http.server.ThreadingHTTPServer] = None
-_cache_httpd_thread: Optional[threading.Thread] = None
 _cache_http_base_url: Optional[str] = None
 
 
+def _default_cache_base_url() -> str:
+    external_prefix = os.environ.get("FLOW2API_MCP_EXTERNAL_URL_PREFIX", "").strip()
+    if external_prefix:
+        return external_prefix.rstrip("/")
+
+    host = (os.environ.get("FLOW2API_MCP_SERVER_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+    if host in {"0.0.0.0", "::"}:
+        host = "127.0.0.1"
+    port = int(os.environ.get("FLOW2API_MCP_SERVER_PORT", "8866") or 8866)
+    return f"http://{host}:{port}"
+
+
 def ensure_cache_http_server() -> Optional[str]:
-    """Start the built-in HTTP server for cache files (idempotent). Returns base URL."""
-    global _cache_httpd, _cache_httpd_thread, _cache_http_base_url
+    """Resolve the public base URL for cache files."""
+    global _cache_http_base_url
 
     if _cache_http_base_url is not None:
         return _cache_http_base_url
     if not URL_CACHE_ENABLED:
         return None
 
-    URL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    class CacheHandler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802
-            try:
-                if not self.path.startswith("/mcp-cache/"):
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-                filename = self.path[len("/mcp-cache/"):].split("?", 1)[0]
-                if not re.fullmatch(r"[a-f0-9]{32}\.[a-z0-9]+", filename):
-                    self.send_response(400)
-                    self.end_headers()
-                    return
-                file_path = URL_CACHE_DIR / filename
-                if not file_path.exists() or not file_path.is_file():
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-                content_type, _ = mimetypes.guess_type(str(file_path))
-                self.send_response(200)
-                self.send_header("Content-Type", content_type or "application/octet-stream")
-                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
-                self.end_headers()
-                with open(file_path, "rb") as f:
-                    self.wfile.write(f.read())
-            except Exception:
-                try:
-                    self.send_response(500)
-                    self.end_headers()
-                except Exception:
-                    pass
-
-        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-            return  # suppress access logs
-
-    bind_host = os.environ.get("FLOW2API_MCP_HOST", "127.0.0.1")
-    requested_port = max(0, min(int(CACHE_HTTP_PORT), 65535))
-    try:
-        httpd = http.server.ThreadingHTTPServer((bind_host, requested_port), CacheHandler)
-    except OSError as exc:
-        if requested_port > 0:
-            print(f"[MCP] 端口 {requested_port} 被占用，回退随机端口: {exc}", file=sys.stderr)
-            httpd = http.server.ThreadingHTTPServer((bind_host, 0), CacheHandler)
-        else:
-            print(f"[MCP] 缓存HTTP服务启动失败: {exc}", file=sys.stderr)
-            return None
-
-    port = httpd.server_address[1]
-
-    external_prefix = os.environ.get("FLOW2API_MCP_EXTERNAL_URL_PREFIX", "").strip()
-    if external_prefix:
-        base_url = external_prefix.rstrip("/")
-    else:
-        base_url = f"http://127.0.0.1:{port}"
-
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-
-    _cache_httpd = httpd
-    _cache_httpd_thread = thread
-    _cache_http_base_url = base_url
-
-    print(f"[MCP] 缓存HTTP服务已启动: {base_url}/mcp-cache/...", file=sys.stderr)
-    return base_url
+    _cache_http_base_url = _default_cache_base_url()
+    return _cache_http_base_url
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +471,9 @@ def is_local_cache_url(url: str) -> bool:
     s = str(url or "").strip()
     if not s:
         return False
+    base = ensure_cache_http_server()
+    if base and s.startswith(base.rstrip("/") + "/mcp-cache/"):
+        return True
     try:
         import urllib.parse
 

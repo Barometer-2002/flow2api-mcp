@@ -17,6 +17,7 @@ from mcp.types import (
 
 from .cache import (
     URL_CACHE_DIR,
+    cache_url_media,
     cache_urls,
     download_url_as_base64,
     ensure_cache_http_server,
@@ -30,9 +31,9 @@ from .cache import (
 )
 from .client import http_client, stream_chat_completions
 from .config import (
-    CACHE_HTTP_PORT,
     DEFAULT_MODEL,
     GENERATE_RETRY_COUNT,
+    IMAGE_PROMPT_SUFFIX,
     SUPPORTED_MODELS,
     URL_CACHE_ENABLED,
     USER_IMAGE_DIR,
@@ -50,16 +51,6 @@ from .utils import (
     parse_data_image_url,
     replace_data_urls_with_local,
     wrap_bare_cache_images,
-)
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX = (
-    "\n\n"
-    "【默认规则】画面/字幕/标牌/海报/界面等任何可见文字默认使用简体中文；"
-    "除非我在提示词里明确指定其他语言或多语言。"
 )
 
 # ---------------------------------------------------------------------------
@@ -287,7 +278,6 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         if b64:
             images.append(b64)
             # Cache and record in history
-            from .cache import store_local_media, ensure_cache_http_server, cache_url_media
             await cache_url_media(image_url_val)
             cached = get_cached_local_url(image_url_val)
             if cached:
@@ -347,7 +337,7 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
             f"请从以下模型中选择: {', '.join(SUPPORTED_MODELS)}"
         ))]
 
-    prompt_to_send = f"{prompt}{DEFAULT_IMAGE_TEXT_LANGUAGE_PROMPT_SUFFIX}"
+    prompt_to_send = f"{prompt}{IMAGE_PROMPT_SUFFIX}"
     content: Any = prompt_to_send
     if images:
         content = [{"type": "text", "text": prompt_to_send}]
@@ -426,7 +416,9 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         if not filename:
             continue
         base = ensure_cache_http_server()
-        local_url = f"{base}/mcp-cache/{filename}" if base else f"http://127.0.0.1:{CACHE_HTTP_PORT}/mcp-cache/{filename}"
+        if not base:
+            continue
+        local_url = f"{base}/mcp-cache/{filename}"
         data_url_map[durl] = local_url
         stored_local_urls.append(local_url)
 
