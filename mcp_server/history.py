@@ -96,6 +96,7 @@ class HistoryManager:
 
     def _save_history(self) -> None:
         try:
+            HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(HISTORY_FILE, "w", encoding="utf-8") as f:
                 json.dump(list(self._recent), f, ensure_ascii=False, indent=2)
             with open(HISTORY_ARCHIVE_FILE, "w", encoding="utf-8") as f:

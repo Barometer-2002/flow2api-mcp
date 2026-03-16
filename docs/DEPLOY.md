@@ -34,7 +34,19 @@
 python -m pip install -r requirements.txt
 ```
 
-推荐直接写 `.env`：
+推荐直接从示例复制一份 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+PowerShell：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+然后再按你的实际参数修改：
 
 ```dotenv
 FLOW2API_BASE_URL=http://127.0.0.1:8000
@@ -87,7 +99,7 @@ FLOW2API_MCP_IMAGE_DIR=%APPDATA%\CherryStudio\Data\Files
 
 ## 方案二：Docker / 远程部署
 
-仓库里已经提供了 [docker-compose.yml](../docker-compose.yml)。
+仓库里提供的是 [docker-compose.example.yml](../docker-compose.example.yml)。
 
 ### 1. 确认关键环境变量
 
@@ -100,22 +112,40 @@ FLOW2API_MCP_IMAGE_DIR=%APPDATA%\CherryStudio\Data\Files
 - `FLOW2API_MCP_URL_CACHE`
 - `FLOW2API_MCP_IMAGE_DIR`
 
-默认的 `docker-compose.yml` 会直接复用本机版本同一份运行时数据：
+复制后本机实际使用的 `docker-compose.yml` 会直接复用本机版本同一份运行时数据：
 
-- `mcp_server/url_cache/`
-- `mcp_server/history.json`
-- `mcp_server/history_archive.json`
+- `data/url_cache/`
+- `data/history.json`
+- `data/history_archive.json`
 
 这样做的好处很直接：
 
 - 本机模式生成过的缓存图，Docker 模式下还能继续访问
-- 不需要额外手建 `data/` 目录或空 JSON 文件
 - 本机与 Docker 的 `history_id`、缓存文件都保持同一份
+
+如果你是从旧版本升级，且旧数据还在 `mcp_server/` 下，请先手动复制到 `data/`：
+
+- `mcp_server/history.json` -> `data/history.json`
+- `mcp_server/history_archive.json` -> `data/history_archive.json`
+- `mcp_server/url_cache/` -> `data/url_cache/`
+- `mcp_server/url_cache.json` -> `data/url_cache.json`
 
 同机测试时，建议再确认这一项：
 
 ```dotenv
 FLOW2API_MCP_EXTERNAL_URL_PREFIX=http://127.0.0.1:8866
+```
+
+先复制一份示例文件：
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+```
+
+PowerShell：
+
+```powershell
+Copy-Item docker-compose.example.yml docker-compose.yml
 ```
 
 补充说明：
@@ -181,6 +211,24 @@ volumes:
 - 服务在远程、图片又传不过去时，先把图片上传到图床、对象存储或其他可访问 URL，再走 `image_url`
 
 ## 客户端配置
+
+## `generate` 参数约定
+
+无论本机还是 Docker，`generate` 的外部调用契约都一样，只接受这 5 个扁平字段：
+
+- `model`
+- `prompt`
+- `history_id`
+- `use_latest_user_image`
+- `image_url`
+
+规则：
+
+- 必填永远只有 `model` 和 `prompt`
+- 三个参考图字段只能有一个有效值
+- 纯文本生成时，这三个参考图字段都不要传
+- 如果客户端硬塞 `history_id=0`、`image_url=""`、`use_latest_user_image=false` 这类占位值，服务会视为“未传”
+- 不要额外再包 `params` / `arguments` / `input`
 
 ### Cherry Studio
 

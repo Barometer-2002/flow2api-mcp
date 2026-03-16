@@ -22,9 +22,7 @@ services:
       # - FLOW2API_MCP_GENERATE_RETRY_COUNT=0
       # - FLOW2API_MCP_DEBUG=0
     volumes:
-      - ./mcp_server/url_cache:/app/mcp_server/url_cache              # 与本机版本共用缓存
-      - ./mcp_server/history.json:/app/mcp_server/history.json        # 与本机版本共用历史
-      - ./mcp_server/history_archive.json:/app/mcp_server/history_archive.json
+      - ./data:/app/data                                              # 与本机版本共用缓存与历史
       - type: bind
         source: ${FLOW2API_MCP_IMAGE_DIR:-./data/user-images}
         target: /app/user-images

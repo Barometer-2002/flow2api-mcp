@@ -61,19 +61,26 @@ from .utils import (
 def _generate_desc() -> str:
     base = """生成图片。
 
-参考图选择（内置SOP，按此执行）：
-- 继续/再改/迭代/把上一张改成 → 使用历史底图：传 history_id（必要时先调用 history 搜索/定位）。
-- 参考这张图生成/把这图变成 → 使用用户新图：传 use_latest_user_image=true。
-- 文本里出现的图片链接/文件名/哈希 → 只当作历史线索；先 history(scope=recent, limit=10) 列出候选让用户选 history_id。
+调用前先判断当前任务属于哪一类：
+- 纯文本生成 / 新建一张图 → 不传任何参考图参数。
+- 继续/再改/迭代/上一张/刚才那张 → 优先使用 history_id；如果用户没给明确 ID，先调用 history(scope=recent, limit=10) 列候选，不要猜测 history_id。
+- 参考这张图生成 / 把这图变成 → 使用用户新图或外部图。
+- 文本里出现的图片链接/文件名/哈希 → 只当作历史线索；先调用 history 定位，不要直接把这类线索当参考图上传。
 
-（当用户新上传图但意图是改历史图：底图用 history_id；新图内容由你看图提取后写进 prompt。）
-
-输出要求：
-- 调用后：把工具返回的图片链接使用 Markdown 图片格式粘贴到最终回复正文里。
+硬规则：
+- 必填只有 model 和 prompt。
+- 只能有一个有效参考图来源：history_id / use_latest_user_image / image_url。
+- 纯生成时三个参考图字段都别传。
+- 如果封装层硬塞了占位值，0 / 空字符串 / false 会视为未传，不算有效参考图来源。
+- 不确定该用哪张历史图时，先 history，后 generate。
+- 当用户既上传新图又要求继续改历史图时，底图仍然使用 history_id；只把新图内容提炼进 prompt。
+- 不要再套 params / arguments / input；参数必须是扁平对象。
+- 除此之外不要额外塞其他字段。
+- 调用后，把工具返回的图片链接以 Markdown 图片形式粘贴到最终回复正文里。
 
 参考图参数（三选一）：
-- history_id：使用历史记录中的图片作为参考图（适合 继续/再改/迭代 等场景；配合 history 获取/搜索）
-- image_url：使用外部图片 URL 作为参考图（适合 Agent/远程调用传入图片）
+- history_id：使用历史记录中的图片作为参考图（适合继续改历史结果；必要时先配合 history 查找）
+- image_url：使用外部图片 URL 作为参考图（适合远程调用或明确给了外链图片）
 """
 
     if USER_IMAGE_DIR is None:
@@ -100,8 +107,14 @@ HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
 用途：搜索/定位 history_id（供 generate.history_id 使用）。
 
-用法（内置SOP）：
-- 当用户说 继续/上一张/再改改/把它加进去 等相对指代时：先列出 recent 候选让用户选 history_id，再 generate。
+什么时候先调用它：
+- 用户说 继续/上一张/再改改/把它加进去 等相对指代时。
+- 文本里只出现了图片链接/文件名/哈希，但没有明确 history_id 时。
+
+硬规则：
+- 不知道 history_id 就先列 recent 候选，再让用户选或由你继续定位。
+- 不要凭空猜测 history_id。
+- 如果封装层传了 history_id=0 或空值，视为未传，按列表模式处理。
 
 参数：
 - history_id: 指定则只返回该条
@@ -111,6 +124,10 @@ HISTORY_DESC = """查看生成历史（跨会话混合累计）。
 
 CACHE_DESC = """缓存/历史清理工具。
 
+默认不要调用 cache。
+
+只有用户明确要求查看/清理缓存，或你在排查缓存问题时，才调用这个工具。
+
 清理历史记录：include_history=true 且 confirm=true。
 
 参数：
@@ -119,7 +136,7 @@ CACHE_DESC = """缓存/历史清理工具。
 - include_history: 是否同时清理/裁剪历史（默认 false）
 - confirm: 删除历史记录确认开关（默认 false；仅 include_history=true 时生效）
 
-注意：clear/prune 会删除本地文件（`mcp_server/url_cache/` 等）。"""
+注意：clear/prune 会删除本地文件（`data/url_cache/` 等）。"""
 
 # ---------------------------------------------------------------------------
 # Tool schemas
@@ -146,29 +163,30 @@ def get_tools() -> list[Tool]:
             "type": "string",
             "description": "可选：外部图片URL作为参考图（Agent/远程调用时使用；MCP会自动下载缓存）",
         },
+        "use_latest_user_image": {
+            "type": "boolean",
+            "description": "可选：使用用户最新上传图作为参考图；仅在服务可访问本地图片目录时可用",
+        },
     }
 
-    if USER_IMAGE_DIR is not None:
-        generate_properties["use_latest_user_image"] = {
-            "type": "boolean",
-            "default": False,
-            "description": "可选：使用用户最新上传图作为参考图",
-        }
-        generate_properties["user_image_count"] = {
-            "type": "integer",
-            "default": 1,
-            "description": "可选：使用最近几张用户图片（默认1，最多5）",
-        }
+    generate_schema: dict[str, object] = {
+        "type": "object",
+        "description": (
+            "只接受扁平参数对象。必填只有 model 和 prompt。"
+            "只能有一个有效参考图来源：history_id / use_latest_user_image / image_url。"
+            "0 / 空字符串 / false 会被视为未传。"
+            "纯生成时不要传参考图字段，也不要再包一层 params / arguments / input。"
+        ),
+        "properties": generate_properties,
+        "required": ["model", "prompt"],
+        "additionalProperties": False,
+    }
 
     return [
         Tool(
             name="generate",
             description=_generate_desc(),
-            inputSchema={
-                "type": "object",
-                "properties": generate_properties,
-                "required": ["model", "prompt"],
-            },
+            inputSchema=generate_schema,
         ),
         Tool(
             name="history",
@@ -231,29 +249,72 @@ def get_tools() -> list[Tool]:
 # ---------------------------------------------------------------------------
 
 
+def _parse_bool_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "0", "false", "no", "off", "none", "null"}:
+            return False
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+    return bool(value)
+
+
 async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
     images: list[str] = []
     mcp_logs: list[str] = []
     used_history_ref = False
 
+    allowed_keys = {"model", "prompt", "history_id", "image_url", "use_latest_user_image"}
+    public_contract = "model, prompt, history_id, use_latest_user_image, image_url"
+    unexpected_keys = sorted(str(k) for k in args.keys() if k not in allowed_keys)
+    if unexpected_keys:
+        return [TextContent(type="text", text=(
+            "错误: generate 只接受这 5 个扁平字段："
+            f"{public_contract}。\n"
+            "必填只有 model 和 prompt；只能有一个有效参考图来源；纯生成时一个都别传。\n"
+            "0 / 空字符串 / false 只会被当成未传，不算有效参考图来源。\n"
+            "不要再套 params / arguments / input，也不要额外塞其他字段。\n"
+            f"本次检测到的多余字段: {', '.join(unexpected_keys)}"
+        ))]
+
     model = str(args.get("model") or "").strip() or DEFAULT_MODEL
+
+    raw_history_id = args.get("history_id")
+    history_id: int | None = None
+    if raw_history_id not in (None, ""):
+        try:
+            parsed_history_id = int(raw_history_id)
+        except Exception:
+            return [TextContent(type="text", text="错误: history_id 必须是整数")]
+        if parsed_history_id > 0:
+            history_id = parsed_history_id
+
+    image_url = str(args.get("image_url") or "").strip() or None
+    use_latest_user_image = _parse_bool_flag(args.get("use_latest_user_image"))
 
     # Validate: only one reference source
     ref_sources = 0
-    if args.get("history_id") is not None:
+    if history_id is not None:
         ref_sources += 1
-    if args.get("use_latest_user_image"):
+    if use_latest_user_image:
         ref_sources += 1
-    if args.get("image_url"):
+    if image_url:
         ref_sources += 1
     if ref_sources > 1:
-        return [TextContent(type="text", text="错误: 参考图来源只能三选一（history_id / use_latest_user_image / image_url），不允许同时提供多个。")]
+        return [TextContent(type="text", text="错误: 只能有一个有效参考图来源（history_id / use_latest_user_image / image_url），不允许同时提供多个有效值。")]
 
     # User image import
-    if args.get("use_latest_user_image"):
+    if use_latest_user_image:
+        if USER_IMAGE_DIR is None:
+            return [TextContent(type="text", text="错误: 当前服务未配置本地图片目录，不能使用 use_latest_user_image=true；请改用 history_id 或 image_url。")]
         try:
-            count = min(int(args.get("user_image_count") or 1), 5)
-            paths = pick_user_image_paths(count)
+            paths = pick_user_image_paths(1)
             local_urls: list[str] = []
             for p in paths:
                 data_uri, local_url = await import_local_file(str(p))
@@ -264,13 +325,13 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
             if local_urls:
                 names = ", ".join(p.name for p in paths)
                 history_manager.add_success("user_image", f"user_image: {names}", local_urls)
-            mcp_logs.append(f"参考图: 用户上传图 x{len(paths)}")
+            mcp_logs.append("参考图: 用户上传图 x1")
         except Exception as exc:
             return [TextContent(type="text", text=f"❌ 用户图片导入失败: {exc}")]
 
     # image_url reference
-    if args.get("image_url"):
-        image_url_val = str(args["image_url"]).strip()
+    if image_url:
+        image_url_val = image_url
         if not image_url_val.startswith(("http://", "https://")):
             return [TextContent(type="text", text="错误: image_url 必须是 http:// 或 https:// 开头的 URL")]
         mcp_logs.append(f"参考图: image_url={image_url_val[:80]}")
@@ -286,20 +347,10 @@ async def handle_generate(args: dict[str, Any]) -> list[TextContent]:
         else:
             return [TextContent(type="text", text=f"❌ 无法下载参考图: {image_url_val[:200]}")]
 
-    # Legacy parameter rejection
-    if args.get("local_file"):
-        return [TextContent(type="text", text="错误: 当前版本不支持 local_file；请使用 history_id / use_latest_user_image / image_url。")]
-    if args.get("images"):
-        return [TextContent(type="text", text="错误: 当前 MCP 不支持透传用户上传图片；请使用 history_id 或 image_url。")]
-
     # History reference
-    if args.get("history_id") is not None:
+    if history_id is not None:
         used_history_ref = True
-        try:
-            item_id = int(args.get("history_id"))
-        except Exception:
-            return [TextContent(type="text", text="错误: history_id 必须是整数")]
-
+        item_id = history_id
         mcp_logs.append(f"参考图: history_id={item_id}")
         history_item = history_manager.get_by_id(item_id, scope="archive")
         if history_item:
@@ -490,6 +541,15 @@ async def handle_history(args: dict[str, Any]) -> list[TextContent]:
     if scope not in ("recent", "archive"):
         scope = "recent"
     limit = int(args.get("limit", 5) or 5)
+    raw_history_id = args.get("history_id")
+    history_id: int | None = None
+    if raw_history_id not in (None, ""):
+        try:
+            parsed_history_id = int(raw_history_id)
+        except Exception:
+            return [TextContent(type="text", text="错误: history_id 必须是整数")]
+        if parsed_history_id > 0:
+            history_id = parsed_history_id
 
     def _render_one(item: dict[str, Any], *, title: str) -> str:
         sizes = history_manager.sizes()
@@ -515,11 +575,8 @@ async def handle_history(args: dict[str, Any]) -> list[TextContent]:
         lines.append("")
         return "\n".join(lines)
 
-    if args.get("history_id") is not None:
-        try:
-            item_id = int(args.get("history_id"))
-        except Exception:
-            return [TextContent(type="text", text="错误: history_id 必须是整数")]
+    if history_id is not None:
+        item_id = history_id
         item = history_manager.get_by_id(item_id, scope="archive") or history_manager.get_by_id(item_id, scope="recent")
         if not item:
             return [TextContent(type="text", text=f"未找到该 history_id: {item_id}")]
@@ -567,8 +624,8 @@ async def handle_cache(args: dict[str, Any]) -> list[TextContent]:
     action = str(args.get("action") or "status").strip() or "status"
     if action not in ("status", "clear", "prune"):
         action = "status"
-    include_history = bool(args.get("include_history", False))
-    confirm = bool(args.get("confirm", False))
+    include_history = _parse_bool_flag(args.get("include_history", False))
+    confirm = _parse_bool_flag(args.get("confirm", False))
     keep = int(args.get("keep", 50) or 50)
 
     if action == "status":
@@ -637,10 +694,11 @@ PROMPTS: dict[str, dict[str, Any]] = {
             "- 工具只接收 1 张参考图（Base）。\n"
             "- 额外的新上传图/外链图视为素材（Element）：由你看图提取关键元素，用文字写进 prompt。\n\n"
             "调用规则：\n"
-            "1) 新建/重绘 -> generate(use_latest_user_image=true)。\n"
-            "2) 迭代修改 -> generate(history_id=...)；不知道 ID 先 history 列出候选。\n"
-            "3) 冲突场景：用户新上传图+改历史图 -> Base=history_id；新图关键元素写入 prompt。\n"
-            "4) 文本里出现图片链接/文件名/哈希：只当作历史线索，不当作参考图传给上游。\n\n"
+            "1) 新建/重绘 -> 纯文本生成时不要传参考图；明确要求参考新图时再用 generate(use_latest_user_image=true)。\n"
+            "2) 迭代修改 -> 先调用 history；不要猜测 history_id；确定后再 generate(history_id=...)。\n"
+            "3) 冲突场景：用户新上传图+改历史图 -> Base=history_id；不要同时传多个参考图来源；如果只是 0 / 空字符串 / false 这种占位值，则视为未传；只把新图内容提炼进 prompt。\n"
+            "4) 文本里出现图片链接/文件名/哈希：只当作历史线索，不当作参考图传给上游；先调用 history。\n"
+            "5) generate 的扁平参数只允许：model、prompt、history_id、use_latest_user_image、image_url；不要再套 params/arguments/input，也不要额外加字段；0 / 空字符串 / false 视为未传。\n\n"
             "输出要求：\n"
             "- generate 返回后，把图片链接以 Markdown 形式粘贴到最终正文。\n"
             "- cache 清理历史需要 include_history=true 且 confirm=true。\n"
@@ -680,8 +738,11 @@ PROMPTS: dict[str, dict[str, Any]] = {
             "3) prompt_summary=...\n"
             "4) error={{error}}\n\n"
             "然后给出下一步建议：\n"
+            "- 先检查是否同时传了多个有效参考图来源；如果是，收敛为一个。\n"
+            "- 再检查是否额外传了 params/arguments/input 或其他无关字段；generate 只接受扁平的 5 个字段。\n"
+            "- 若用户使用相对指代（上一张/继续改/刚才那张），不要猜测 history_id；先调用 history。\n"
             "- 若是 401/403：检查 API Key/权限/配额。\n"
-            "- 若是 400：缩短 prompt、检查模型名、检查参考图是否存在。\n"
+            "- 若是 400：缩短 prompt、检查模型名、检查参考图是否存在，并确认只使用一个有效参考图来源。\n"
             "- 若无结果：提示用户开启本机缓存，并建议换模型重试。\n"
         ),
     },

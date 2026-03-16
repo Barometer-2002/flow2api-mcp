@@ -21,7 +21,7 @@
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `FLOW2API_BASE_URL` | `http://localhost:8000` | 上游根地址。代码会基于它访问 `/v1/models` 和 `/v1/chat/completions` |
+| `FLOW2API_BASE_URL` | `http://localhost:8000` | 上游根地址。代码会基于它访问 `/v1/chat/completions` |
 | `FLOW2API_API_KEY` | 空 | 上游 API Key |
 
 ### 缓存 HTTP
@@ -35,10 +35,12 @@
 
 缓存默认文件：
 
-- `mcp_server/url_cache/`
-- `mcp_server/url_cache.json`
+- `data/url_cache/`
+- `data/url_cache.json`
 
-默认 `docker-compose.yml` 也会挂载同一份 `mcp_server/url_cache/`，所以本机与 Docker 共享缓存文件。
+从 `docker-compose.example.yml` 复制出来的本机 `docker-compose.yml` 也会挂载同一份 `data/`，所以本机与 Docker 共享缓存文件。
+
+旧版本如果还在使用 `mcp_server/url_cache/` 和 `mcp_server/url_cache.json`，请手动复制到 `data/` 下同名位置。
 
 ### 本地图片导入
 
@@ -74,10 +76,12 @@ FLOW2API_MCP_IMAGE_DIR
 
 历史默认文件：
 
-- `mcp_server/history.json`
-- `mcp_server/history_archive.json`
+- `data/history.json`
+- `data/history_archive.json`
 
-默认 `docker-compose.yml` 也会挂载这两个文件，所以本机与 Docker 共享同一份历史记录。
+从 `docker-compose.example.yml` 复制出来的本机 `docker-compose.yml` 也会挂载同一份 `data/`，所以本机与 Docker 共享同一份历史记录。
+
+旧版本如果还在使用 `mcp_server/history.json` 和 `mcp_server/history_archive.json`，请手动复制到 `data/` 下同名位置。
 
 ## 常用配置示例
 
@@ -144,11 +148,14 @@ FLOW2API_MCP_PROMPT_SUFFIX=【默认规则】画面里的所有文字统一使�
 | `use_latest_user_image` | `boolean` | 使用本地目录中的最新图片做参考图 |
 | `image_url` | `string` | 使用远程可访问图片 URL 做参考图 |
 
-如果配置了 `FLOW2API_MCP_IMAGE_DIR`，还可以带：
+参数契约要点：
 
-| 参数 | 类型 | 说明 |
-| --- | --- | --- |
-| `user_image_count` | `integer` | 读取最近几张本地图片，默认 `1`，最大 `5` |
+- 必填永远只有 `model` 和 `prompt`
+- 只能有一个有效参考图来源：`history_id` / `use_latest_user_image` / `image_url`
+- 纯文本生成时，这三个参考图字段一个都不要传
+- 如果封装层硬塞 `0` / `""` / `false`，会被当成“未传”，不算有效参考图来源
+- 不要再包一层 `params` / `arguments` / `input`
+- 除这 5 个字段外，不要额外再传其他字段
 
 自动追加规则：
 
@@ -235,15 +242,17 @@ FLOW2API_MCP_PROMPT_SUFFIX=【默认规则】画面里的所有文字统一使�
 4. 远程 / Docker 部署是否开启了 `FLOW2API_MCP_URL_CACHE=1`
 5. 远程 / Docker 部署是否设置了 `FLOW2API_MCP_EXTERNAL_URL_PREFIX`
 
-### 模型同步失败
+### 自定义模型列表
 
-常见原因：
+当前版本不会在启动时自动同步上游模型。
 
-- 上游不可达
-- API Key 无权限访问 `/v1/models`
-- `FLOW2API_BASE_URL` 配错
+你可以直接编辑 `mcp_server/models.json`，控制三件事：
 
-这不会阻止 MCP 启动。服务会继续使用已有的 `mcp_server/models.json` 或内置默认模型。
+- `models`：工具里允许选择的模型列表
+- `default_model`：默认模型
+- `selection_guide`：显示给模型/客户端的模型选择提示
+
+如果你只想保留几个常用模型，直接删到只剩你要的那几个即可。
 
 ### 客户端连不上 MCP
 

@@ -11,13 +11,15 @@ from .env_loader import load_project_env
 
 load_project_env()
 
-PROJECT_ROOT = Path(__file__).parent
-HISTORY_FILE = PROJECT_ROOT / "history.json"
-HISTORY_ARCHIVE_FILE = PROJECT_ROOT / "history_archive.json"
-MODELS_CONFIG_FILE = PROJECT_ROOT / "models.json"
+MODULE_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = MODULE_ROOT.parent
+DATA_DIR = PROJECT_ROOT / "data"
+HISTORY_FILE = DATA_DIR / "history.json"
+HISTORY_ARCHIVE_FILE = DATA_DIR / "history_archive.json"
+MODELS_CONFIG_FILE = MODULE_ROOT / "models.json"
 
-URL_CACHE_DIR = PROJECT_ROOT / "url_cache"
-URL_CACHE_INDEX_FILE = PROJECT_ROOT / "url_cache.json"
+URL_CACHE_DIR = DATA_DIR / "url_cache"
+URL_CACHE_INDEX_FILE = DATA_DIR / "url_cache.json"
 URL_CACHE_ENABLED = os.environ.get("FLOW2API_MCP_URL_CACHE", "0") != "0"
 URL_CACHE_MAX_ENTRIES = int(os.environ.get("FLOW2API_MCP_URL_CACHE_MAX_ENTRIES", "200"))
 URL_CACHE_MAX_FILE_BYTES = (

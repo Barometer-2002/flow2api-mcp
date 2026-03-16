@@ -7,7 +7,7 @@
 推荐部署方式只有两种：
 
 - 本机常驻 HTTP：适合 Cherry Studio 和本机客户端，入口通常是 `http://127.0.0.1:8866/mcp`
-- Docker / 远程部署：适合自己长期挂着，或从别的设备访问
+- Docker / 远程部署：适合长期挂着，或从别的设备访问
 
 ## 先记 3 个地址
 
@@ -19,7 +19,7 @@
 
 ## 核心能力
 
-- 启动时自动从上游 `/v1/models` 同步模型到 `mcp_server/models.json`
+- 模型列表、默认模型、模型选型提示全部由 `mcp_server/models.json` 控制
 - 提供 `generate`、`history`、`cache` 三个工具
 - 可把上游临时图片链接缓存到本地，再通过 HTTP 稳定访问
 - 支持 `history_id`、`use_latest_user_image`、`image_url` 三种图生图参考图来源，依次是历史结果、用户上传图、外部 URL。
@@ -44,7 +44,19 @@ python -m pip install -r requirements.txt
 
 ### 2. 推荐直接写 `.env`
 
-本机启动最省事的方式，是在项目根目录创建一个 `.env`：
+本机启动最省事的方式，是直接从示例复制一份 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+PowerShell：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+然后按你的实际参数修改 `.env`：
 
 ```dotenv
 FLOW2API_BASE_URL=http://127.0.0.1:8000
@@ -107,13 +119,32 @@ http://127.0.0.1:8866/mcp-cache/<hash>.jpg
 FLOW2API_MCP_EXTERNAL_URL_PREFIX=http://127.0.0.1:8866
 ```
 
-默认的 `docker-compose.yml` 会直接复用本机版本正在使用的运行时文件：
+从 `docker-compose.example.yml` 复制出来的本机 `docker-compose.yml` 会直接复用本机版本正在使用的运行时文件：
 
-- `mcp_server/url_cache/`
-- `mcp_server/history.json`
-- `mcp_server/history_archive.json`
+- `data/url_cache/`
+- `data/history.json`
+- `data/history_archive.json`
 
 也就是说，本机模式下已经生成过的缓存图，切到 Docker 后默认还能继续访问同一个 `mcp-cache` 链接。
+
+如果你之前的旧版本把运行时数据放在 `mcp_server/` 下，升级后请手动复制到 `data/`：
+
+- `mcp_server/history.json` -> `data/history.json`
+- `mcp_server/history_archive.json` -> `data/history_archive.json`
+- `mcp_server/url_cache/` -> `data/url_cache/`
+- `mcp_server/url_cache.json` -> `data/url_cache.json`
+
+先复制一份 Docker 示例文件：
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+```
+
+PowerShell：
+
+```powershell
+Copy-Item docker-compose.example.yml docker-compose.yml
+```
 
 然后启动：
 
@@ -134,6 +165,24 @@ FLOW2API_MCP_EXTERNAL_URL_PREFIX=http://<server>:8866
 ```
 
 ## 客户端配置
+
+## `generate` 参数约定
+
+`generate` 对外只接受 5 个扁平字段：
+
+- `model`
+- `prompt`
+- `history_id`
+- `use_latest_user_image`
+- `image_url`
+
+规则：
+
+- 必填永远只有 `model` 和 `prompt`
+- `history_id` / `use_latest_user_image` / `image_url` 只能有一个有效值
+- 纯文本生成时，这三个参考图字段都不要传
+- 如果某些客户端硬塞 `0` / `""` / `false` 这类占位值，服务会把它们视为“未传”
+- 不要再包一层 `params` / `arguments` / `input`
 
 ### Cherry Studio
 

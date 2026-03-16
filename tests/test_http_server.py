@@ -85,10 +85,11 @@ def test_streamable_http_app_supports_initialize_and_tools_list():
         assert {"generate", "history", "cache"} <= tool_names
 
 
-def test_streamable_http_app_serves_cached_files():
+def test_streamable_http_app_serves_cached_files(tmp_path, monkeypatch):
     import mcp_server.server as server_module
 
     server_module = importlib.reload(server_module)
+    monkeypatch.setattr(server_module, "URL_CACHE_DIR", tmp_path / "data" / "url_cache")
     filename = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg"
     file_path = server_module.URL_CACHE_DIR / filename
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,7 +115,6 @@ def test_cli_dispatches_streamable_http_transport_by_default(monkeypatch):
 
     monkeypatch.setattr(cli_module, "force_utf8_console", lambda: calls.setdefault("utf8", True))
     monkeypatch.setattr(cli_module, "load_project_env", lambda: calls.setdefault("env", True))
-    monkeypatch.setattr(cli_module, "_sync_models", lambda: calls.setdefault("sync", True))
     monkeypatch.setattr(
         cli_module,
         "run_streamable_http",

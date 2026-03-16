@@ -40,3 +40,85 @@ def test_generate_handles_data_url_results_without_image_url_reference(monkeypat
 
     assert result
     assert "http://127.0.0.1:8866/mcp-cache/cached.png" in result[0].text
+
+
+def test_generate_ignores_empty_reference_placeholders(monkeypatch):
+    import mcp_server.config as config_module
+    import mcp_server.tools as tools_module
+
+    config_module = importlib.reload(config_module)
+    tools_module = importlib.reload(tools_module)
+
+    captured: dict[str, object] = {}
+
+    async def fake_get_client():
+        return object()
+
+    async def fake_stream_chat_completions(client, *, base_url, api_key, model, messages):
+        captured["messages"] = messages
+        return 200, "", "https://example.com/result.png", ""
+
+    monkeypatch.setattr(tools_module.http_client, "get_client", fake_get_client)
+    monkeypatch.setattr(tools_module, "stream_chat_completions", fake_stream_chat_completions)
+    monkeypatch.setattr(tools_module.history_manager, "add_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tools_module.history_manager, "add_failure", lambda *args, **kwargs: None)
+
+    result = asyncio.run(
+        tools_module.handle_generate(
+            {
+                "model": config_module.DEFAULT_MODEL,
+                "prompt": "base prompt",
+                "history_id": 0,
+                "image_url": "",
+                "use_latest_user_image": False,
+            }
+        )
+    )
+
+    assert result
+    assert captured["messages"] == [
+        {
+            "role": "user",
+            "content": f"base prompt{config_module.IMAGE_PROMPT_SUFFIX}",
+        }
+    ]
+
+
+def test_generate_treats_string_false_as_unset_reference_flag(monkeypatch):
+    import mcp_server.config as config_module
+    import mcp_server.tools as tools_module
+
+    config_module = importlib.reload(config_module)
+    tools_module = importlib.reload(tools_module)
+
+    captured: dict[str, object] = {}
+
+    async def fake_get_client():
+        return object()
+
+    async def fake_stream_chat_completions(client, *, base_url, api_key, model, messages):
+        captured["messages"] = messages
+        return 200, "", "https://example.com/result.png", ""
+
+    monkeypatch.setattr(tools_module.http_client, "get_client", fake_get_client)
+    monkeypatch.setattr(tools_module, "stream_chat_completions", fake_stream_chat_completions)
+    monkeypatch.setattr(tools_module.history_manager, "add_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tools_module.history_manager, "add_failure", lambda *args, **kwargs: None)
+
+    result = asyncio.run(
+        tools_module.handle_generate(
+            {
+                "model": config_module.DEFAULT_MODEL,
+                "prompt": "base prompt",
+                "use_latest_user_image": "false",
+            }
+        )
+    )
+
+    assert result
+    assert captured["messages"] == [
+        {
+            "role": "user",
+            "content": f"base prompt{config_module.IMAGE_PROMPT_SUFFIX}",
+        }
+    ]
