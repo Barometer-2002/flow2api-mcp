@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Legacy runtime data from older versions (DO NOT commit)
+mcp_server/history.json
+mcp_server/history_archive.json
+mcp_server/url_cache/
+mcp_server/url_cache.json
+mcp_server/upstream_debug_last.txt
+
+# Docker
+docker-compose.yml
+docker-compose.override.yml
+
+# Current runtime data (DO NOT commit)
+data/
+
+# Internal planning notes (DO NOT commit)
+docs/plans/
+
+# Distribution
+dist/
+build/
+*.egg-info/

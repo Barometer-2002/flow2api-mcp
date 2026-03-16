@@ -1,0 +1,30 @@
+services:
+  flow2api-mcp:
+    build: .
+    container_name: flow2api-mcp-http
+    ports:
+      - "8866:8000"       # MCP Streamable HTTP（同时承载 /mcp 与 /mcp-cache）
+    environment:
+      # === 必填 ===
+      - FLOW2API_BASE_URL=${FLOW2API_BASE_URL}
+      - FLOW2API_API_KEY=${FLOW2API_API_KEY}
+
+      # === 推荐 ===
+      - FLOW2API_MCP_URL_CACHE=${FLOW2API_MCP_URL_CACHE:-1}
+      - FLOW2API_MCP_EXTERNAL_URL_PREFIX=${FLOW2API_MCP_EXTERNAL_URL_PREFIX:-http://127.0.0.1:8866}
+      - FLOW2API_MCP_IMAGE_DIR=/app/user-images
+      # 跨机器访问时，把上面改成 http://你的服务器IP:8866
+
+      # === 可选 ===
+      # - FLOW2API_MCP_URL_CACHE_MAX_ENTRIES=200
+      # - FLOW2API_MCP_HISTORY_RECENT_SIZE=50
+      # - FLOW2API_MCP_HISTORY_ARCHIVE_SIZE=2000
+      # - FLOW2API_MCP_GENERATE_RETRY_COUNT=0
+      # - FLOW2API_MCP_DEBUG=0
+    volumes:
+      - ./data:/app/data                                              # 与本机版本共用缓存与历史
+      - type: bind
+        source: ${FLOW2API_MCP_IMAGE_DIR:-./data/user-images}
+        target: /app/user-images
+        read_only: true
+    restart: unless-stopped
