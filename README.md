@@ -1,3 +1,5 @@
+
+
 # Flow2API MCP Server
 
 把 [Flow2API](https://github.com/TheSmallHanCat/flow2api) / OpenAI-compatible 图片上游封装成 MCP 服务。
@@ -122,6 +124,7 @@ FLOW2API_MCP_EXTERNAL_URL_PREFIX=http://127.0.0.1:8866
 从 `docker-compose.example.yml` 复制出来的本机 `docker-compose.yml` 会直接复用本机版本正在使用的运行时文件：
 
 - `data/url_cache/`
+- `data/url_cache.json`
 - `data/history.json`
 - `data/history_archive.json`
 
